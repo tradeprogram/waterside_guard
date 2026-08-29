@@ -19,7 +19,8 @@ from typing import Any
 from common.envelope import error_envelope, make_envelope
 
 CLOUD_SCL_CLASSES = [3, 8, 9, 10]  # 구름그림자/구름(중)/구름(고)/씨러스 — 이 값들은 유효 관측에서 제외
-MAX_CLOUDY_PIXEL_PCT = 30  # 타일 전체 구름 30% 이상인 장면은 조회 단계에서 제외
+MAX_TILE_CLOUDY_PIXEL_PCT = 80  # 타일(최대 110x110km) 전체 구름 메타데이터 예비필터 — 성능용 대략치일 뿐, 실제 채택 기준 아님
+MIN_AOI_VALID_RATIO = 0.5  # AOI 내부 유효(비구름) 픽셀 비율이 이 값 미만이면 채택하지 않음 — 실제 채택 기준은 이것
 REDUCE_SCALE_M = 10  # Sentinel-2 10m 밴드 기준
 
 _ee_initialized = False
@@ -62,11 +63,15 @@ def _fetch_ee_timeseries(geometry_4326: dict, date_range: list[str]) -> list[dic
 
     geom = ee.Geometry(geometry_4326)
 
+    # CLOUDY_PIXEL_PERCENTAGE는 타일(최대 110x110km) 전체 기준이라 AOI가 작으면 오도할 수 있다
+    # (실측: 유방동 AOI가 맑은 날인데도 타일 전체 구름 때문에 30% 기준에서 걸러진 사례 확인,
+    # 2026-08-29). 그래서 여기서는 넓은 예비필터(80%)로 후보만 줄이고, 실제 채택 여부는 아래
+    # add_stats가 계산하는 AOI 자체의 valid_ratio(MIN_AOI_VALID_RATIO)로 판단한다.
     collection = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterBounds(geom)
         .filterDate(date_range[0], date_range[1])
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", MAX_CLOUDY_PIXEL_PCT))
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", MAX_TILE_CLOUDY_PIXEL_PCT))
     )
 
     def add_stats(img: "ee.Image") -> "ee.Image":
@@ -105,8 +110,8 @@ def _fetch_ee_timeseries(geometry_4326: dict, date_range: list[str]) -> list[dic
 
     scenes = []
     for acq_date, ndvi_mean, ndmi_mean, valid_ratio in zip(dates, ndvi_means, ndmi_means, valid_ratios):
-        if valid_ratio is None:
-            continue  # AOI 전체가 구름 등으로 마스킹된 장면
+        if valid_ratio is None or valid_ratio < MIN_AOI_VALID_RATIO:
+            continue  # AOI 내 유효 픽셀 비율이 기준 미달 — 구름 등으로 신뢰할 수 없는 장면
         scenes.append(
             {
                 "source": "sentinel2",

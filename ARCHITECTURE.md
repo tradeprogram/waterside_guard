@@ -173,7 +173,9 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **막히면**: V-World 개발자 문서(vworld.kr/dev)는 봇 접근을 막아둬서 자동 크롤링이 안 된다 — 사용자가 브라우저로 직접 확인하거나 `PublicDataReader`의 `VworldData` 클래스 소스코드를 직접 읽는 게 빠르다.
 
-**진행 상태(2026-08-29)**: `scripts/fetch_parcel_geometry.py`로 유방동 85필지 중 **82필지(96.5%) 복원 성공**. 미확인 3필지(149-4/149-1/147-1)는 연속지적도에 없는 코드 — 필지 합병·분할로 PNU가 갱신됐을 가능성(§12 TODO). 복원 결과의 중심좌표는 (127.2095E, 37.2622N)로 용인시 처인구 유방동 실제 위치와 일치 확인(`data/processed/yongin_yubang_parcels.geojson`, 내부 EPSG:5179 저장). `PublicDataReader.VworldData.get_data()`의 `attrFilter="pnu:like:{PNU}"` 문법이 그대로 동작함을 확인 — 라이브러리를 감싸지 않고 동일한 요청 패턴을 직접 구현했다(응답 페이지네이션·재시도 제어를 위해). 다음 단계는 6,275건 전체 확장 — PNU당 개별 API 호출이라 요청 간격(`REQUEST_INTERVAL_SEC=0.2`) 기준 약 20분 소요 예상, V-World 일일 호출한도 확인 필요.
+**진행 상태(2026-08-29, 완료)**: `scripts/fetch_parcel_geometry.py`로 유방동 85필지 중 **82필지(96.5%) 복원 성공**. 미확인 3필지(149-4/149-1/147-1)는 연속지적도에 없는 코드 — 필지 합병·분할로 PNU가 갱신됐을 가능성. 복원 결과의 중심좌표는 (127.2095E, 37.2622N)로 용인시 처인구 유방동 실제 위치와 일치 확인(`data/processed/yongin_yubang_parcels.geojson`, 내부 EPSG:5179 저장). `PublicDataReader.VworldData.get_data()`의 `attrFilter="pnu:like:{PNU}"` 문법이 그대로 동작함을 확인 — 라이브러리를 감싸지 않고 동일한 요청 패턴을 직접 구현했다(응답 페이지네이션·재시도 제어를 위해).
+
+**6,275건 전체 확장도 완료**: `data/processed/hanriver_maesu_parcels.geojson` — **5,526건(88.1%) 복원**, 미확인 749건은 `hanriver_maesu_parcels_미확인_pnu.txt`. 복원 결과의 전체 범위(위도 37.05~37.85, 경도 127.20~127.89)가 한강유역환경청 관할인 한강 수계와 일치함을 확인. 미확인 749건의 원인 분석(합병·분할 vs 다른 사유)은 아직 미착수 — §12 TODO.
 
 ### 3.3 정적 레이어
 
@@ -271,7 +273,9 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **폴백**: 구름 20% 이상인 장면은 자동 제외 후 최근 유효 장면으로 대체, `warnings`에 대체 사유 기록.
 
-**구현 상태(2026-08-29, 2026-08-29 재작성)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. **아직 실제 프로젝트 ID로 검증되지 않음** — `GEE_PROJECT_ID` 확보 후 `pytest module_obs/tests/ -v`의 `test_live_fetch_returns_scenes_when_credentials_present`(현재 skip)를 통과시킬 것.
+**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점.
+
+**유방동 AOI로 실제 검증됨** — `GEE_PROJECT_ID` 등록 후(Earth Engine API가 해당 Cloud 프로젝트에서 비활성 상태였던 걸 콘솔에서 활성화) 2026-06-01~08-25 구간에서 NDVI 0.51~0.58 수준의 실제 관측치를 받았다. **실증 중 발견·수정한 버그**: `CLOUDY_PIXEL_PERCENTAGE`는 Sentinel-2 타일(최대 110×110km) 전체 기준이라, 우리 AOI처럼 작은 영역은 타일 다른 곳의 구름 때문에 실제로는 맑은 장면도 걸러지는 문제가 실측으로 확인됐다. 그래서 타일 메타데이터 필터는 후보를 줄이는 넓은 예비필터(80%)로만 쓰고, 실제 채택 기준은 `reduceRegion`으로 계산한 **AOI 자체의 유효(비구름) 픽셀 비율**(`MIN_AOI_VALID_RATIO=0.5`)로 바꿨다. `pytest module_obs/tests/ -v`의 라이브 테스트(`test_live_fetch_returns_scenes_when_credentials_present`)가 실제 API 호출로 통과함을 확인 — `conftest.py`가 `.env`를 자동 로드해 pytest에서도 자격증명을 인식한다.
 
 ### Module CHG — 변화탐지 (`module_chg`)
 
@@ -529,9 +533,8 @@ POST /reports/weekly
 | 기간 | 목표 | 산출물 |
 |---|---|---|
 | 8/29–8/31 | Scope Lock, 리포 세팅(이 문서) | README/ARCHITECTURE 확정, 공식 붙임1 PDF 재확인 |
-| 8/29 | **Data MVP 1단계 완료** — 유방동 85필지 중 82필지(96.5%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson` |
-| 9/1–9/5 | **Data MVP 2단계**(§3.2) | 6,275건 전체 확장, 미확인 3필지 원인 확인 |
-| 9/6–9/10 | Module OBS + CHG (2026-08-29 조기 착수, 코드 완료·GEE_PROJECT_ID 확보 후 실증 대기) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
+| 8/29 | **Data MVP 완료** — 유방동 82/85필지(96.5%) + 한강유역 전체 5,526/6,275필지(88.1%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson`, `hanriver_maesu_parcels.geojson` |
+| 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
 | 9/11–9/14 | Module AGG + RISK(rule) | 대상지 단위 feature, rule baseline, Top-N |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
 | 9/19–9/22 | Module O + UI | 지도·Priority Queue·Evidence Card |
@@ -551,6 +554,6 @@ POST /reports/weekly
 
 이 프로젝트는 Aquaguard처럼 여러 세션이 병렬로 작업하는 구조가 **아니다** — 사용자 1인 + Claude Code 세션이 순차적으로 §12 로드맵을 따라간다. 그래서 `contracts/` 폴더에 별도 JSON Schema 파일을 만들지 않았다 — 이 문서 §5의 예시 JSON이 유일한 소스 오브 트루스다. 새 모듈을 만들 때는 이 문서 §5를 먼저 갱신하고 코드를 짜라.
 
-**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP 1단계(유방동 82/85필지 복원)는 완료됐다 — 다음은 6,275건 전체 확장이거나(§3.2), 이미 됐다면 Module OBS/CHG(§5) 착수다.
+**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP(PNU→polygon)와 Module OBS/CHG(위성 관측·변화탐지)는 2026-08-29에 조기 완료됐다 — 다음은 **Module AGG + RISK**(§5, pixel/scene → 관리대상지 단위 feature 집계 → rule-based risk_score)다.
 
-**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`는 이미 배치돼 있다(2026-08-29). PNU→polygon 복원 스크립트는 `scripts/fetch_parcel_geometry.py` — 재실행하려면 `python scripts/fetch_parcel_geometry.py --input data/raw/<csv> --output data/processed/<geojson>`.
+**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). PNU→polygon 복원 스크립트는 `scripts/fetch_parcel_geometry.py`. Module OBS/CHG를 재검증하려면 `python -m pytest module_obs/tests/ module_chg/tests/ -v`(`.env`를 `conftest.py`가 자동 로드하므로 라이브 테스트까지 함께 돈다).

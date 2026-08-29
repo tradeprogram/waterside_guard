@@ -172,8 +172,8 @@ sequenceDiagram
 |---|---|---|
 | `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체 6,275행 (PNU/소재지/기준일, **좌표 없음**) | `data/raw/`에 배치 완료 |
 | `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링 85행 — 삼성전자·한강유역환경청 협력 복원사업(약 33만㎡) 부지, 실증 앵커 | `data/raw/`에 배치 완료 |
-| V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | **82/85필지(96.5%) 복원·검증 완료** — `scripts/fetch_parcel_geometry.py`, 6,275건 전체 확장 실행 중 |
-| Sentinel-2 / Sentinel-1 | 광학/SAR 위성 시계열 (Google Earth Engine) | 파이프라인 코드 완료(`module_obs/`) — **`GEE_PROJECT_ID` 미확보로 실증 대기** |
+| V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | **유방동 82/85필지(96.5%) + 한강유역 전체 5,526/6,275필지(88.1%) 복원 완료** — `scripts/fetch_parcel_geometry.py` |
+| Sentinel-2 | 광학 위성 시계열 (Google Earth Engine) | **실증 완료** — `module_obs/`가 유방동 AOI에서 실제 NDVI/NDMI 시계열 수신 확인 |
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
@@ -200,7 +200,7 @@ scripts/                      # 파이프라인 스크립트 (Milestone별)
 
 ```bash
 pip install -r requirements.txt
-python -m pytest module_obs/tests/ module_chg/tests/ -v   # 자격증명 없이도 통과(mock 기반)
+python -m pytest module_obs/tests/ module_chg/tests/ -v   # .env가 있으면 라이브 GEE 테스트까지 실행(conftest.py가 자동 로드)
 ```
 
 ---
@@ -209,9 +209,9 @@ python -m pytest module_obs/tests/ module_chg/tests/ -v   # 자격증명 없이�
 
 | 기간 | 목표 |
 |---|---|
-| 8/29 | **Data MVP 1단계 완료** — 유방동 82/85필지 폴리곤 복원·검증. 6,275건 전체 확장 실행 중 |
-| 8/29 | **Module OBS·CHG 코드 완료** (조기 착수, Google Earth Engine 기반) — `GEE_PROJECT_ID` 확보 후 실증 대기 |
-| 9/6–9/14 | Module AGG + RISK(규칙기반 Risk Engine) |
+| 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
+| 8/29 | **Module OBS·CHG 실증 완료** (조기 착수, Google Earth Engine) — 유방동 AOI 실제 NDVI/NDMI 시계열 수신 확인 |
+| 9/11–9/14 | Module AGG + RISK(규칙기반 Risk Engine) |
 | 9/15–9/22 | 지도 대시보드 + Priority Queue UI |
 | 9/23–9/27 | Backtest(baseline 대비 성능) + Evidence Agent |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
