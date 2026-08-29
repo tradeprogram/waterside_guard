@@ -287,8 +287,9 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 { "aoi_id": "YONGIN_YUBANG", "site_geometry_5179": { "type": "Polygon", "coordinates": [] },
   "baseline_period": ["2024-06-01", "2024-08-31"], "current_period": ["2026-06-01", "2026-08-31"] }
 
-// output (data) — sar_vv_delta/sar_anomaly는 2026-08-30 추가(아래 "SAR 융합 추가" 참조)
-{ "anomaly_score": 0.72, "changed_area_ratio": 0.18,
+// output (data) — sar_vv_delta/sar_anomaly는 2026-08-30, changed_area_ratio_source는
+// 2026-08-31 추가(아래 "SAR 융합 추가"·"요인 실측화" 참조)
+{ "anomaly_score": 0.72, "changed_area_ratio": 0.18, "changed_area_ratio_source": "pixel_diff", // "pixel_diff" | "approximated"
   "change_type_hint": "vegetation_decline", // "vegetation_decline" | "moisture_increase" | "bare_ground_increase" | "no_significant_change" | "possible_change_sar_only"
   "source": "observed", "confidence_interval": [0.61, 0.83],
   "sar_vv_delta": 2.5, "sar_anomaly": 0.833 }
@@ -623,4 +624,9 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 **막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 저장소 루트에서 `python -m pytest -v`(`conftest.py`가 `.env`를 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`. 서버·UI를 띄우려면 `python -m uvicorn api_server:app --port 8001`(백엔드) 후 `cd ui && npm run dev`(프론트) — `ui/lib/api.ts`의 `NEXT_PUBLIC_API_BASE` 기본값이 `http://localhost:8001`.
 
-**알려진 한계(2026-08-29, 2026-08-30 일부 해소)**: `scripts/run_priority_queue_demo.py`/`run_priority_queue_batch.py`가 만드는 `site_attributes` 중 `recent_rainfall_mm`은 이제 채워진다(`common/weather.py`, Open-Meteo). 그러나 `restoration_elapsed_days`·`last_inspection_days_ago`·`adjacent_to_water`·`past_anomaly_count`는 여전히 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·인접수계여부·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio`+`sar_anomaly_mean`+`recent_rainfall_mm` 네 요인(가중치 합 0.65)만으로 계산돼 최대치가 구조적으로 낮다. `adjacent_to_water`는 실제로는 GEE의 수체 레이어(JRC Global Surface Water 등)로 계산 가능한 값이니 §12 B급 확장 우선순위로 다음에 붙일 것.
+**알려진 한계(2026-08-29, 2026-08-30·2026-08-31 일부 해소)**: `scripts/run_priority_queue_demo.py`/`run_priority_queue_batch.py`가 만드는 `site_attributes` 중 `recent_rainfall_mm`(`common/weather.py`, Open-Meteo)과 `adjacent_to_water`(`module_obs/water.py`, JRC Global Surface Water — 아래 참조)는 이제 채워진다. `restoration_elapsed_days`·`last_inspection_days_ago`·`past_anomaly_count`만 여전히 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio`+`sar_anomaly_mean`+`recent_rainfall_mm`+`adjacent_to_water` 다섯 요인(가중치 합 0.75)으로 계산된다.
+
+**요인 실측화(2026-08-31, "기술 스택을 더 끌어올릴 방법" 질문에서 진행)**:
+- **`adjacent_to_water` 실측**: 지금까지 항상 `None`이었던 요인을 `module_obs/water.py`(JRC Global Surface Water `occurrence` 밴드, 버퍼 150m 내 최댓값이 25% 이상이면 인접으로 판정)로 실제 계산한다. "수변가드 AI"라는 이름의 서비스가 정작 이 값을 못 채우고 있던 어색한 공백을 메꿨다. 단일/배치 조회 둘 다 구현(`is_adjacent_to_water`/`is_adjacent_to_water_batch`) — 배치는 SAR 배치와 같은 이유로 `reduceRegions` 출력 컬럼명이 밴드명이 아니라 reducer 출력명("max")이 되는 함정을 그대로 재사용해 처리한다. 60개 site 재생성 결과 20개가 인접 판정(true).
+- **`changed_area_ratio` 실측**: `module_obs/pixel_diff.py`가 기준·현재 기간 NDVI 합성(median composite)을 픽셀 단위로 빼서 |변화|가 `ANOMALY_THRESHOLD_FOR_CHANGE`를 넘는 픽셀의 이진 마스크를 만들고, 그 마스크를 `reduceRegion(mean)`하면 그 자체가 "변화 픽셀 비율"이 된다는 트릭을 쓴다(§12 로드맵에 있던 B급 확장 항목을 완료). `module_chg.compute_change_from_scenes()`에 `real_changed_area_ratio` 파라미터를 추가해, 주어지면 그 값을 쓰고 GEE 호출이 실패하면 기존 이상도 근사치로 자동 폴백한다 — 어느 쪽인지 `changed_area_ratio_source`("pixel_diff" | "approximated") 필드로 항상 구분해 표시해 과장하지 않는다. 60개 site 전부 실측 성공(폴백 0건).
+- 두 함수 모두 배치 버전은 site 수와 무관하게 이미지 1~2장 + `reduceRegions` 1회로 끝나는 기존 배치 패턴을 그대로 따른다(§ Module OBS 배치 조회 구현 상태 참조).

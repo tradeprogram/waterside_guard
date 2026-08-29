@@ -5,9 +5,12 @@
     "aoi_id": "YONGIN_YUBANG",
     "anomaly_score": 0.72,
     "changed_area_ratio": 0.18,
+    "changed_area_ratio_source": "pixel_diff",
     "change_type_hint": "vegetation_decline",
     "source": "observed",
-    "confidence_interval": [0.61, 0.83]
+    "confidence_interval": null,
+    "sar_vv_delta": 1.2,
+    "sar_anomaly": 0.4
   },
   "warnings": []
 }

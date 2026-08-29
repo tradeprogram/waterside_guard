@@ -6,10 +6,12 @@
     "features": {
       "anomaly_score_mean": 0.72,
       "changed_area_ratio": 0.18,
+      "sar_anomaly_mean": 0.4,
       "adjacent_to_water": true,
       "restoration_elapsed_days": 420,
       "last_inspection_days_ago": 63,
-      "past_anomaly_count": 1
+      "past_anomaly_count": 1,
+      "recent_rainfall_mm": 20.0
     }
   },
   "warnings": []

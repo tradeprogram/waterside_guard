@@ -157,3 +157,23 @@ def test_sar_only_fallback_when_optical_unavailable(mock_obs):
 
 def test_compute_change_from_scenes_returns_none_when_nothing_available():
     assert compute_change_from_scenes([], [], baseline_sar_vv_mean=None, current_sar_vv_mean=None) is None
+
+
+def test_real_changed_area_ratio_overrides_approximation():
+    # 근사치(magnitude/0.3)와 다른 값을 넘겨서, 실제로 그 값이 쓰였는지(근사치가 아니라) 확인.
+    result = compute_change_from_scenes(
+        [{"indices": {"ndvi_mean": 0.70, "ndmi_mean": 0.30}}],
+        [{"indices": {"ndvi_mean": 0.40, "ndmi_mean": 0.28}}],
+        real_changed_area_ratio=0.123,
+    )
+    assert result["changed_area_ratio"] == 0.123
+    assert result["changed_area_ratio_source"] == "pixel_diff"
+
+
+def test_changed_area_ratio_falls_back_to_approximation_when_real_value_missing():
+    result = compute_change_from_scenes(
+        [{"indices": {"ndvi_mean": 0.70, "ndmi_mean": 0.30}}],
+        [{"indices": {"ndvi_mean": 0.40, "ndmi_mean": 0.28}}],
+    )
+    assert result["changed_area_ratio_source"] == "approximated"
+    assert result["changed_area_ratio"] == round(min(0.30 / 0.3, 1.0), 3)

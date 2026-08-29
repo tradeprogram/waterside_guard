@@ -4,10 +4,11 @@ Module OBS를 baseline_period·current_period 두 번 호출해 NDVI/NDMI 평균
 계절 정규화 이상도를 계산한다. 종(種) 단위 판독은 하지 않는다 — "정상
 계절패턴과 다른 변화가 있다/없다"까지만 말한다(ARCHITECTURE.md §3.4).
 
-MVP 범위 제한 — `changed_area_ratio`는 아직 픽셀 단위 변화면적이 아니라
-scene 평균 지표의 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서
-Earth Engine `reduceRegion` histogram 기반 픽셀 diff로 교체 예정). 이 근사를
-code에 명시해 과장하지 않는다.
+2026-08-30: `changed_area_ratio`가 원래는 scene 평균 지표의 이상도 크기로부터
+근사한 값이었다(§12 로드맵 B급 확장 항목) — 이제 `module_obs/pixel_diff.py`의
+실제 픽셀 단위 측정값(기준·현재 NDVI 합성을 픽셀별로 빼서 임계치 넘는 비율)을
+우선 쓰고, 그 GEE 호출이 실패했을 때만 기존 근사치로 폴백한다. `changed_area_ratio_source`
+필드로 어느 쪽인지 항상 구분해 표시한다 — 근사치를 실측인 것처럼 과장하지 않는다.
 
 2026-08-30: Sentinel-1 SAR(`sar_vv_mean`, Module OBS가 제공)를 두 번째
 독립 신호로 추가했다. 원 리서치(수상전략 리포트)의 "기술적 해자 1번:
@@ -64,6 +65,7 @@ def compute_change_from_scenes(
     current_scenes: list[dict],
     baseline_sar_vv_mean: float | None = None,
     current_sar_vv_mean: float | None = None,
+    real_changed_area_ratio: float | None = None,
 ) -> dict | None:
     """순수 함수 — Module OBS가 이미 반환한 scene 리스트(+SAR 평균)만으로 anomaly_score
     등을 계산한다. OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이
@@ -73,6 +75,10 @@ def compute_change_from_scenes(
     같이 반환한다. 광학 scene이 하나라도 없는데 SAR 평균은 둘 다 있으면(구름으로 광학이
     전멸한 경우) SAR만으로 이상도를 근사한다 — 그래서 다른 신호들과 달리, scene이
     비어 있어도 SAR만 있으면 None을 반환하지 않는다(§ 모듈 docstring 2026-08-30).
+
+    `real_changed_area_ratio`는 호출부가 `module_obs/pixel_diff.py`로 미리 계산해 넘기는
+    실제 픽셀 단위 값이다(이 함수 자체는 여전히 GEE를 부르지 않는 순수 함수로 남긴다) —
+    주어지면 그걸 쓰고, 없으면(GEE 실패 등) 기존 이상도 근사치로 폴백한다.
     """
     has_optical = bool(baseline_scenes) and bool(current_scenes)
 
@@ -86,9 +92,11 @@ def compute_change_from_scenes(
     if not has_optical:
         if sar_anomaly is None:
             return None
+        changed_area_ratio = real_changed_area_ratio if real_changed_area_ratio is not None else sar_anomaly
         return {
             "anomaly_score": sar_anomaly,
-            "changed_area_ratio": sar_anomaly,
+            "changed_area_ratio": changed_area_ratio,
+            "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
             "change_type_hint": "possible_change_sar_only",
             "source": "observed_sar_fallback",
             "confidence_interval": None,
@@ -106,7 +114,8 @@ def compute_change_from_scenes(
 
     magnitude = max(abs(ndvi_delta or 0.0), abs(ndmi_delta or 0.0))
     anomaly_score = round(min(magnitude / 0.5, 1.0), 3)  # 0.5 편차를 사실상 최대치로 정규화(초기 가정치, Backtest A로 보정)
-    changed_area_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — 픽셀 단위 아님(모듈 docstring 참조)
+    approximated_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — real_changed_area_ratio가 없을 때만 씀
+    changed_area_ratio = round(real_changed_area_ratio, 4) if real_changed_area_ratio is not None else approximated_ratio
 
     ndvi_values = [s["indices"].get("ndvi_mean") for s in current_scenes if s["indices"].get("ndvi_mean") is not None]
     ci: list[float] | None = None
@@ -117,6 +126,7 @@ def compute_change_from_scenes(
     return {
         "anomaly_score": anomaly_score,
         "changed_area_ratio": changed_area_ratio,
+        "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
         "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
         "source": "observed",
         "confidence_interval": ci,
@@ -157,11 +167,24 @@ def run(input: dict) -> dict:
     baseline_scenes = baseline_obs["data"].get("scenes", [])
     current_scenes = current_obs["data"].get("scenes", [])
 
+    # 픽셀 단위 실측 — 실패해도(구름 등) None으로 남아 근사치 폴백이 자동으로 작동한다
+    # (compute_change_from_scenes 참조). obs_run과 별개의 GEE 호출이라 여기서만 예외를 흡수한다.
+    # module_obs.pixel_diff가 이 모듈의 ANOMALY_THRESHOLD_FOR_CHANGE를 참조하므로(순환 임포트
+    # 방지) 함수 안에서만 지연 임포트한다.
+    real_changed_area_ratio = None
+    try:
+        from module_obs.pixel_diff import compute_changed_area_ratio as pixel_diff_run
+
+        real_changed_area_ratio = pixel_diff_run(geometry_4326, baseline_period, current_period)
+    except Exception as e:  # noqa: BLE001
+        warnings.append(f"[{aoi_id}] 픽셀 단위 변화면적 계산 실패, 근사치로 대체: {e}")
+
     computed = compute_change_from_scenes(
         baseline_scenes,
         current_scenes,
         baseline_sar_vv_mean=baseline_obs["data"].get("sar_vv_mean"),
         current_sar_vv_mean=current_obs["data"].get("sar_vv_mean"),
+        real_changed_area_ratio=real_changed_area_ratio,
     )
     if computed is None:
         warnings.append(f"[{aoi_id}] 기준기간 또는 현재기간에 유효 관측이 없어 변화탐지를 건너뜁니다.")
@@ -170,6 +193,7 @@ def run(input: dict) -> dict:
                 "aoi_id": aoi_id,
                 "anomaly_score": None,
                 "changed_area_ratio": None,
+                "changed_area_ratio_source": None,
                 "change_type_hint": "no_significant_change",
                 "source": "observed",
                 "confidence_interval": None,

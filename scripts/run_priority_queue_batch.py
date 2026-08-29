@@ -28,6 +28,8 @@ from common.weather import fetch_recent_rainfall_mm
 from module_agg.run import run as agg_run
 from module_chg.run import compute_change_from_scenes
 from module_obs.batch import run_batch, run_batch_sar
+from module_obs.pixel_diff import compute_changed_area_ratio_batch
+from module_obs.water import is_adjacent_to_water_batch
 from module_risk.run import run as risk_run
 
 BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
@@ -98,16 +100,23 @@ def main() -> None:
         lon, lat = point_5179_to_4326(centroid_5179.x, centroid_5179.y)
         rainfall_by_site[site_id] = fetch_recent_rainfall_mm(lat, lon, as_of_date=CURRENT_PERIOD[1])
 
+    print("Earth Engine 배치 조회 — JRC Global Surface Water(수체 인접 여부)...")
+    water_by_site = is_adjacent_to_water_batch(sites_for_obs)
+    print("Earth Engine 배치 조회 — 픽셀 단위 변화면적...")
+    changed_area_ratio_by_site = compute_changed_area_ratio_batch(sites_for_obs, BASELINE_PERIOD, CURRENT_PERIOD)
+
     rows = []
     for site_id, meta in site_meta.items():
         baseline_scenes = baseline_by_site.get(site_id, [])
         current_scenes = current_by_site.get(site_id, [])
         recent_rainfall_mm = rainfall_by_site.get(site_id)
+        adjacent_to_water = water_by_site.get(site_id)
         computed = compute_change_from_scenes(
             baseline_scenes,
             current_scenes,
             baseline_sar_vv_mean=baseline_sar_by_site.get(site_id),
             current_sar_vv_mean=current_sar_by_site.get(site_id),
+            real_changed_area_ratio=changed_area_ratio_by_site.get(site_id),
         )
 
         if computed is None:
@@ -122,7 +131,10 @@ def main() -> None:
                 {
                     "site_id": site_id,
                     "chg_results": [computed],
-                    "site_attributes": {"recent_rainfall_mm": recent_rainfall_mm},
+                    "site_attributes": {
+                        "recent_rainfall_mm": recent_rainfall_mm,
+                        "adjacent_to_water": adjacent_to_water,
+                    },
                 }
             )
             risk_result = risk_run({"site_id": site_id, "features": agg_result["data"]["features"]})
@@ -145,6 +157,8 @@ def main() -> None:
                 "change_type_hint": change_type_hint,
                 "sar_vv_delta": sar_vv_delta,
                 "recent_rainfall_mm": recent_rainfall_mm,
+                "adjacent_to_water": adjacent_to_water,
+                "changed_area_ratio_source": computed.get("changed_area_ratio_source") if computed else None,
                 "contributing_factors_json": json.dumps(contributing_factors, ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_scenes, ensure_ascii=False),
                 "current_scenes_json": json.dumps(current_scenes, ensure_ascii=False),

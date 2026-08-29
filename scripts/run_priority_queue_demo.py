@@ -23,6 +23,7 @@ from shapely.geometry import mapping
 from module_agg.run import run as agg_run
 from module_chg.run import run as chg_run
 from module_obs.run import run as obs_run
+from module_obs.water import is_adjacent_to_water
 from module_risk.run import run as risk_run
 from common.geo import geometry_5179_to_4326, point_5179_to_4326
 from common.weather import fetch_recent_rainfall_mm
@@ -62,15 +63,18 @@ def main() -> None:
         centroid_5179 = row.geometry.centroid
         lon, lat = point_5179_to_4326(centroid_5179.x, centroid_5179.y)
         recent_rainfall_mm = fetch_recent_rainfall_mm(lat, lon, as_of_date=CURRENT_PERIOD[1])
+        geometry_4326_for_water = geometry_5179_to_4326(mapping(row.geometry))
+        adjacent_to_water = is_adjacent_to_water(geometry_4326_for_water)
 
         agg_result = agg_run(
             {
                 "site_id": site_id,
                 "pnu": row.pnu,
                 "chg_results": [chg_result["data"]],
-                # site_attributes: KECI 내부 자산 DB 접근 불가(§ Module AGG 구현 상태 참조) — recent_rainfall_mm만
-                # 공개 데이터(Open-Meteo)로 채울 수 있고 나머지는 여전히 None.
-                "site_attributes": {"recent_rainfall_mm": recent_rainfall_mm},
+                # site_attributes: KECI 내부 자산 DB 접근 불가(§ Module AGG 구현 상태 참조) — recent_rainfall_mm·
+                # adjacent_to_water는 공개 데이터(Open-Meteo·JRC Global Surface Water)로 채울 수 있고
+                # 나머지(복원경과일·최근점검일·과거이상이력)는 여전히 None.
+                "site_attributes": {"recent_rainfall_mm": recent_rainfall_mm, "adjacent_to_water": adjacent_to_water},
             }
         )
 
@@ -94,6 +98,8 @@ def main() -> None:
                 "change_type_hint": chg_result["data"].get("change_type_hint"),
                 "sar_vv_delta": chg_result["data"].get("sar_vv_delta"),
                 "recent_rainfall_mm": recent_rainfall_mm,
+                "adjacent_to_water": adjacent_to_water,
+                "changed_area_ratio_source": chg_result["data"].get("changed_area_ratio_source"),
                 "chg_status": chg_result["status"],
                 "contributing_factors_json": json.dumps(risk_result["data"]["contributing_factors"], ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_obs["data"].get("scenes", []), ensure_ascii=False),
