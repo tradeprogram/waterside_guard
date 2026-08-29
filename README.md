@@ -2,7 +2,7 @@
 
 한국환경보전원(KECI)이 관리하는 전국 수변녹지·매수토지 중 **오늘 현장직원이 먼저 가봐야 할 곳**을 위성 변화탐지 + GIS 위험도 점수로 자동 산출하고, 현장점검 결과를 다시 데이터로 환류시켜 수변녹지 관리의 전 과정을 잇는 의사결정지원 시스템.
 
-> 이 리포에서 작업을 시작하는 모든 사람(사람이든 Claude Code 세션이든)은 이 README를 먼저 읽을 것. 더 상세한 아키텍처·모듈 계약·로드맵은 **[ARCHITECTURE.md](ARCHITECTURE.md)**가 정본(SoT)이다. 원본 리서치·핸드오프 브리프는 [`docs/`](docs/)에 있다.
+> 이 리포에서 작업을 시작하는 모든 사람(사람이든 Claude Code 세션이든)은 이 README를 먼저 읽을 것. 더 상세한 모듈 계약·Backtest 전략·로드맵은 **[ARCHITECTURE.md](ARCHITECTURE.md)**가 정본(SoT)이다. 원본 리서치·핸드오프 브리프는 [`docs/`](docs/)에 있다.
 
 **2026년 한국환경보전원 대국민 환경혁신 아이디어 공모전**(부제: 환경을 잇다, 미래를 잇다) 제출용 프로토타입. 접수 2026.9.1.~9.30. 18:00.
 
@@ -18,16 +18,151 @@
 
 ---
 
-## 시스템 흐름
+## 아키텍처 다이어그램
 
-```
-관측(위성 OBS) → 변화탐지(CHG) → GIS 집계(AGG) → 위험도산정(RISK)
-   → 우선순위 큐(O) → 현장점검(FIELD) → 검증·환류(VERIFY)
-                              ↑
-                    Evidence Agent(AGENT) — 왜 1순위인지 설명, 점검표·주간보고 자동생성
+### 전체 시스템 — KECI 기존 기반 위에 얹는 8개 모듈
+
+```mermaid
+flowchart TB
+    subgraph KECI["🏛️ KECI 기존 관리기반 (이미 존재)"]
+        direction LR
+        K1["수변녹지 GIS<br/>591만㎡ · 1,700개소"]
+        K2["매수토지 PNU<br/>6,275건 (한강유역환경청)"]
+        K3["드론 모니터링"]
+        K4["국토위성 협력<br/>(2026.8~)"]
+    end
+
+    subgraph OBSL["Module OBS — 관측 수집·전처리"]
+        direction LR
+        O1["Sentinel-2 광학<br/>10m · ~5일 재방문"]
+        O2["Sentinel-1 SAR<br/>all-weather"]
+        O3["V-World 연속지적도<br/>PNU → 필지 폴리곤"]
+    end
+
+    subgraph PIPE["분석 파이프라인 (배치 실행)"]
+        direction TB
+        C1["Module CHG<br/>시계열 이상탐지<br/><small>NDVI/NDMI anomaly · SAR change</small>"]
+        A1["Module AGG<br/>GIS 공간 집계<br/><small>pixel → 관리대상지(site_id) 단위</small>"]
+        R1["Module RISK<br/>위험도 산정<br/><small>규칙기반 → LightGBM ranking</small><br/>risk_score 0~100"]
+        C1 --> A1 --> R1
+    end
+
+    subgraph OPS["운영 layer"]
+        direction TB
+        OR1["Module O<br/>오케스트레이션<br/>Top-N 우선순위 큐"]
+        F1["Module FIELD<br/>현장점검 입력<br/>사진 · 결과 등록"]
+        V1["Module VERIFY<br/>Backtest·검증<br/>Precision@K vs baseline"]
+        OR1 --> F1 --> V1
+    end
+
+    AG1["Module AGENT<br/>Evidence Agent<br/><small>왜 1순위인지 설명 · 점검표/주간보고 자동생성<br/>숫자를 만들지 않고 tool output만 읽음</small>"]
+
+    subgraph UI["대시보드"]
+        direction LR
+        U1["지도 + Priority Queue"]
+        U2["Before/After Evidence Card"]
+    end
+
+    K1 -.자산속성.-> A1
+    K2 --> O3
+    K3 -.향후 연동.-> O1
+    K4 -.향후 연동.-> O1
+
+    O1 --> C1
+    O2 --> C1
+    O3 --> A1
+
+    R1 --> OR1
+    OR1 --> U1
+    U1 --> F1
+    F1 --> V1
+    V1 -->|성능 피드백·가중치 보정| R1
+
+    OR1 -.tool 호출.-> AG1
+    F1 -.tool 호출.-> AG1
+    AG1 --> U2
+
+    classDef existing fill:#e8ecf1,stroke:#5c6b7a,color:#1a2530
+    classDef pipeline fill:#dcecdc,stroke:#3f7a3f,color:#1a2e1a
+    classDef ops fill:#fdeecb,stroke:#b8860b,color:#3a2c05
+    classDef agent fill:#e6dcf5,stroke:#6a3fa0,color:#2a1a3a
+    classDef ui fill:#d8ecf5,stroke:#2f7ea3,color:#122b36
+    class K1,K2,K3,K4 existing
+    class O1,O2,O3,C1,A1,R1 pipeline
+    class OR1,F1,V1 ops
+    class AG1 agent
+    class U1,U2 ui
 ```
 
-담당자는 지도에서 Top-N 대상만 먼저 확인한다. 위험도는 항상 근거(`contributing_factors`)와 함께 노출되고, Agent는 숫자를 만들지 않고 그 근거를 읽어서 설명만 한다. 전문은 [ARCHITECTURE.md §2·§5](ARCHITECTURE.md#2-시스템-아키텍처).
+`K3`(드론)·`K4`(국토위성)는 실제 기관 도입 단계에서 연결하는 확장 경로다. 공모전 프로토타입은 `O1`(Sentinel-2)·`O2`(Sentinel-1)·`O3`(V-World 공개 API)만으로 완성한다 — 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
+
+### 7단계 상태머신 (관리대상지 1건 기준)
+
+```mermaid
+stateDiagram-v2
+    [*] --> 관측: Module OBS
+    관측 --> 변화탐지: Module CHG
+    변화탐지 --> 공간집계: Module AGG
+    공간집계 --> 위험도산정: Module RISK
+    위험도산정 --> 우선순위큐등록: Module O
+    우선순위큐등록 --> 현장점검등록: 담당자가 Top-N 확인
+    현장점검등록 --> 결과입력: Module FIELD
+    결과입력 --> 검증완료: Module VERIFY
+    검증완료 --> 위험도산정: 다음 주기 (가중치 보정)
+
+    note right of 위험도산정
+        risk_score 0~100
+        + contributing_factors
+        (근거 없는 숫자는 없음)
+    end note
+    note right of 검증완료
+        예측 vs 실측 비교
+        Precision@K, baseline 대비 성능
+    end note
+```
+
+담당자 승인 게이트는 없다 — 재난 대응형 시스템이 아니므로 "현장점검을 실제로 갈지 말지" 판단 자체가 이미 human-in-the-loop이다. 전문은 [ARCHITECTURE.md §2.1](ARCHITECTURE.md#21-7단계-상태머신).
+
+### 사용자 시나리오 — 월요일 아침 담당자의 하루
+
+```mermaid
+sequenceDiagram
+    actor 담당자
+    participant UI as 대시보드
+    participant O as Module O
+    participant AG as Evidence Agent
+    participant FIELD as Module FIELD
+    participant VERIFY as Module VERIFY
+
+    담당자->>UI: 월요일 오전 접속
+    UI->>O: 이번 주 Priority Queue 조회
+    O-->>UI: Top-N 대상지 (risk_score 순)
+    담당자->>UI: 1순위 대상지 클릭
+    UI->>AG: "왜 1순위야?"
+    AG-->>UI: anomaly_score·변화면적·최근점검일 근거 설명
+    담당자->>UI: 현장점검 등록
+    담당자->>FIELD: 현장 사진·점검결과 업로드
+    FIELD->>VERIFY: 예측 대비 실측 결과 기록
+    VERIFY-->>O: Precision@K 갱신 → 다음 주기 가중치 보정
+    Note over 담당자,VERIFY: 주말: Agent가 주간보고서 자동 생성
+```
+
+---
+
+## 모듈 요약
+
+| 모듈 | 역할 | 핵심 출력 |
+|---|---|---|
+| **OBS** | Sentinel-2/1, V-World 연속지적도 수집·전처리 | 위성 composite, PNU 폴리곤 |
+| **CHG** | 시계열 대비 이상변화 탐지 (종 판독 아님, "달라졌다"까지만) | `anomaly_score`, `changed_area_ratio` |
+| **AGG** | pixel → 관리대상지(`site_id`) 단위로 GIS 집계 | 대상지별 feature 벡터 |
+| **RISK** | 규칙기반(1단계) → LightGBM ranking(2단계, label 확보 후) | `risk_score`(0~100) + `contributing_factors`(근거) |
+| **O** | Top-N 우선순위 큐 생성·상태 관리 | `priority_queue` |
+| **FIELD** | 현장점검 사진·결과 입력 | `inspection_id` |
+| **VERIFY** | 예측 vs 실측 backtest, baseline 비교 | `Precision@K`, `Recall@Top20%` |
+| **AGENT** | 위 모듈들의 tool output을 읽어 자연어로 설명·보고서 생성 (숫자를 만들지 않음) | 점검표, 주간보고서 |
+
+전체 모듈 입출력 계약(예시 JSON)은 [`contracts/`](contracts/) 및 [ARCHITECTURE.md §5](ARCHITECTURE.md#5-모듈-계약--입출력-예시)에 있다. 모든 모듈은 공통 봉투(envelope) 규약 `{status, fallback_tier, data, warnings}`을 따른다 — [ARCHITECTURE.md §4](ARCHITECTURE.md#4-통합-규약-모든-모듈-필수-준수).
 
 ---
 
