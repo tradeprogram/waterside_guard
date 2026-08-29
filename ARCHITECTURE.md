@@ -259,21 +259,22 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 ### Module OBS — 관측 수집·전처리 (`module_obs`)
 
 ```jsonc
-// input
+// input — aoi_geometry_4326은 GeoJSON geometry(EPSG:4326). site_geometry_5179를 가진 호출부는
+// common.geo.geometry_5179_to_4326()으로 변환해서 넘긴다(외부 관측 API 경계에서만 4326 사용, §4.1)
 { "aoi_id": "YONGIN_YUBANG", "date_range": ["2026-06-01", "2026-08-25"],
-  "sources": ["sentinel2", "sentinel1"] }
+  "aoi_geometry_4326": { "type": "Polygon", "coordinates": [] } }
 
-// output (data)
-{ "scenes": [
+// output (data) — composite_ref는 예약 필드, 현재 구현은 항상 null(§ 구현 상태 참조)
+{ "aoi_id": "YONGIN_YUBANG", "scenes": [
     { "source": "sentinel2", "acquisition_date": "2026-08-20", "cloud_cover_pct": 8.2,
       "indices": { "ndvi_mean": 0.61, "ndmi_mean": 0.34 } }
   ],
-  "composite_ref": "s3://.../yongin_yubang_2026-08.tif" }
+  "composite_ref": null }
 ```
 
 **폴백**: 구름 20% 이상인 장면은 자동 제외 후 최근 유효 장면으로 대체, `warnings`에 대체 사유 기록.
 
-**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점.
+**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. 현재 구현은 Sentinel-2만 지원한다(입력에 `sources` 필드는 없음 — 애초에 다중소스 스위칭을 만들지 않았다, Sentinel-1은 §3.4에 적어둔 것처럼 향후 확장). `composite_ref`는 지도에 실제 위성영상 타일을 얹을 때(Before/After Evidence Card, §8) 쓸 예약 필드로 코드에 남겨뒀지만 아직 채우지 않는다.
 
 **유방동 AOI로 실제 검증됨** — `GEE_PROJECT_ID` 등록 후(Earth Engine API가 해당 Cloud 프로젝트에서 비활성 상태였던 걸 콘솔에서 활성화) 2026-06-01~08-25 구간에서 NDVI 0.51~0.58 수준의 실제 관측치를 받았다. **실증 중 발견·수정한 버그**: `CLOUDY_PIXEL_PERCENTAGE`는 Sentinel-2 타일(최대 110×110km) 전체 기준이라, 우리 AOI처럼 작은 영역은 타일 다른 곳의 구름 때문에 실제로는 맑은 장면도 걸러지는 문제가 실측으로 확인됐다. 그래서 타일 메타데이터 필터는 후보를 줄이는 넓은 예비필터(80%)로만 쓰고, 실제 채택 기준은 `reduceRegion`으로 계산한 **AOI 자체의 유효(비구름) 픽셀 비율**(`MIN_AOI_VALID_RATIO=0.5`)로 바꿨다. `pytest module_obs/tests/ -v`의 라이브 테스트(`test_live_fetch_returns_scenes_when_credentials_present`)가 실제 API 호출로 통과함을 확인 — `conftest.py`가 `.env`를 자동 로드해 pytest에서도 자격증명을 인식한다.
 

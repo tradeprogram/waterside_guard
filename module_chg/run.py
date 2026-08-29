@@ -6,13 +6,12 @@ Module OBS를 baseline_period·current_period 두 번 호출해 NDVI/NDMI 평균
 
 MVP 범위 제한 — `changed_area_ratio`는 아직 픽셀 단위 변화면적이 아니라
 scene 평균 지표의 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서
-Process API 기반 픽셀 diff로 교체 예정). 이 근사를 code에 명시해 과장하지
-않는다.
+Earth Engine `reduceRegion` histogram 기반 픽셀 diff로 교체 예정). 이 근사를
+code에 명시해 과장하지 않는다.
 """
 from __future__ import annotations
 
 import statistics
-from typing import Any
 
 from common.envelope import error_envelope, make_envelope
 from common.geo import geometry_5179_to_4326

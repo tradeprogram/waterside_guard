@@ -11,7 +11,7 @@
         "indices": { "ndvi_mean": 0.61, "ndmi_mean": 0.34 }
       }
     ],
-    "composite_ref": "s3://.../yongin_yubang_2026-08.tif"
+    "composite_ref": null
   },
   "warnings": []
 }

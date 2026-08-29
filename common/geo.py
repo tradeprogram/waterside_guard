@@ -4,9 +4,9 @@
 재투영한다. 이 파일이 그 경계를 명시적으로 표시하는 유일한 지점이 되도록,
 다른 모듈은 pyproj를 직접 import하지 말고 이 헬퍼를 통해서만 변환한다.
 
-예외 — Module OBS가 Sentinel Hub에 AOI를 조회할 때는 입력이 EPSG:4326이어야
-하므로 `geometry_5179_to_4326`으로 한 번 더 반대 방향 변환을 허용한다
-(Sentinel Hub·V-World 등 외부 API 경계에서만).
+예외 — Module OBS가 Google Earth Engine에 AOI를 조회할 때는 입력이
+EPSG:4326이어야 하므로 `geometry_5179_to_4326`으로 한 번 더 반대 방향
+변환을 허용한다(Earth Engine·V-World 등 외부 API 경계에서만).
 """
 from __future__ import annotations
 
@@ -33,8 +33,8 @@ def point_4326_to_5179(lon: float, lat: float) -> tuple[float, float]:
 def geometry_5179_to_4326(geometry_5179: dict) -> dict:
     """GeoJSON geometry(EPSG:5179) -> GeoJSON geometry(EPSG:4326).
 
-    외부 관측 API(Sentinel Hub) 조회 시 AOI를 4326으로 넘겨야 하는 경계에서만
-    사용한다 — 내부 저장·모듈 간 교환은 계속 5179를 유지한다.
+    외부 관측 API(Google Earth Engine) 조회 시 AOI를 4326으로 넘겨야 하는
+    경계에서만 사용한다 — 내부 저장·모듈 간 교환은 계속 5179를 유지한다.
     """
     geom = shape(geometry_5179)
     reprojected = shapely_transform(lambda x, y: _TO_4326.transform(x, y), geom)

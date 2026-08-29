@@ -3,7 +3,6 @@
   "fallback_tier": 1,
   "data": {
     "site_id": "A1037",
-    "pnu": "4146110500100780003",
     "features": {
       "anomaly_score_mean": 0.72,
       "changed_area_ratio": 0.18,

@@ -3,14 +3,8 @@
   "fallback_tier": 1,
   "data": {
     "site_id": "A1037",
-    "inspector_id": "staff_003",
-    "inspected_at": "2026-09-02T10:15:00+09:00",
-    "actual_anomaly_found": true,
-    "anomaly_category": "식생교란",
-    "photo_refs": ["field/A1037/2026-09-02_01.jpg"],
-    "note": "동측 사면 나지 노출 확인",
     "inspection_id": "INSP-20260902-A1037",
-    "status_result": "완료"
+    "status": "완료"
   },
   "warnings": []
 }
