@@ -8,5 +8,5 @@ fastapi
 uvicorn
 python-dotenv
 matplotlib  # 시각 검증용 (data/processed 미리보기)
-sentinelhub  # Module OBS — Sentinel-2/1 Statistical API
+earthengine-api  # Module OBS — Google Earth Engine (COPERNICUS/S2_SR_HARMONIZED)
 pytest

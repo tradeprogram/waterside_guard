@@ -173,7 +173,7 @@ sequenceDiagram
 | `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체 6,275행 (PNU/소재지/기준일, **좌표 없음**) | `data/raw/`에 배치 완료 |
 | `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링 85행 — 삼성전자·한강유역환경청 협력 복원사업(약 33만㎡) 부지, 실증 앵커 | `data/raw/`에 배치 완료 |
 | V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | **82/85필지(96.5%) 복원·검증 완료** — `scripts/fetch_parcel_geometry.py`, 6,275건 전체 확장 실행 중 |
-| Sentinel-2 / Sentinel-1 | 광학/SAR 위성 시계열 | 파이프라인 코드 완료(`module_obs/`) — **Sentinel Hub API 키 미확보로 실증 대기** |
+| Sentinel-2 / Sentinel-1 | 광학/SAR 위성 시계열 (Google Earth Engine) | 파이프라인 코드 완료(`module_obs/`) — **`GEE_PROJECT_ID` 미확보로 실증 대기** |
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
@@ -187,7 +187,7 @@ ARCHITECTURE.md             # 아키텍처 확정안 v1.0 — 정본(SoT)
 docs/                        # 원본 리서치 PDF, 핸드오프 브리프
 contracts/                   # 모듈별 입출력 예시 JSON (= ARCHITECTURE.md §5)
 common/                       # envelope·좌표변환 등 전 모듈 공유 유틸
-module_obs/                   # Module OBS — Sentinel Hub Statistical API
+module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2)
 module_chg/                   # Module CHG — 변화탐지 (OBS 두 번 호출·이상도 계산)
   tests/                        # pytest, 모듈별 독립 실행 가능
 data/
@@ -210,7 +210,7 @@ python -m pytest module_obs/tests/ module_chg/tests/ -v   # 자격증명 없이�
 | 기간 | 목표 |
 |---|---|
 | 8/29 | **Data MVP 1단계 완료** — 유방동 82/85필지 폴리곤 복원·검증. 6,275건 전체 확장 실행 중 |
-| 8/29 | **Module OBS·CHG 코드 완료** (조기 착수) — Sentinel Hub 자격증명 확보 후 실증 대기 |
+| 8/29 | **Module OBS·CHG 코드 완료** (조기 착수, Google Earth Engine 기반) — `GEE_PROJECT_ID` 확보 후 실증 대기 |
 | 9/6–9/14 | Module AGG + RISK(규칙기반 Risk Engine) |
 | 9/15–9/22 | 지도 대시보드 + Priority Queue UI |
 | 9/23–9/27 | Backtest(baseline 대비 성능) + Evidence Agent |

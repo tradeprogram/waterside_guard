@@ -191,6 +191,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 | Sentinel-1 (SAR) | VV/VH backscatter | 구름 낀 집중호우 전후에도 광역 변화 후보 탐지 | all-weather, day-and-night. 정밀 종 분류 목적 아님 — 광역 screening 전용 |
 | 강우·수문 | 기상청 API허브 등 | 이벤트 트리거, 유출위험 보조 feature | MVP는 배치 모드, 이벤트 연동은 §12 B급 |
 
+**접근 경로**: Sentinel Hub/CDSE가 아니라 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 접근한다(2026-08-29 확정 — 사용자가 이미 GEE 접근권한을 보유). `reduceRegion`으로 AOI 단위 서버사이드 집계만 받아오므로 픽셀 래스터 전체를 내려받지 않는다. Sentinel-1은 MVP 범위에서는 미구현 — `ee.ImageCollection('COPERNICUS/S1_GRD')`로 동일 패턴 확장 가능(§12 B급).
+
 **매우 중요한 범위 제한** — Sentinel-2로 "칡이 발생했다" 같은 종 단위 판독을 주장하지 않는다. 프로토타입이 말할 수 있는 것은: **"이 대상지는 정상적인 계절패턴과 다른 식생·피복 변화가 나타났으므로 고해상도 영상 또는 현장확인이 필요하다"**까지다. 이 정직한 범위 설정이 신뢰도를 높인다.
 
 ### 3.5 벡터 데이터
@@ -269,7 +271,7 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **폴백**: 구름 20% 이상인 장면은 자동 제외 후 최근 유효 장면으로 대체, `warnings`에 대체 사유 기록.
 
-**구현 상태(2026-08-29)**: `module_obs/run.py` — Sentinel Hub **Statistical API**로 AOI 단위 NDVI/NDMI 평균을 조회한다(픽셀 래스터 전체를 받지 않고 서버사이드 zonal statistics만 받아 MVP 대역폭 비용을 낮춤). `SENTINELHUB_CLIENT_ID/SECRET`이 `.env`에 없으면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. **아직 실제 자격증명으로 검증되지 않음** — Sentinel Hub 키 확보 후 `pytest module_obs/tests/ -v`의 `test_live_fetch_returns_scenes_when_credentials_present`(현재 skip)를 통과시킬 것.
+**구현 상태(2026-08-29, 2026-08-29 재작성)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. **아직 실제 프로젝트 ID로 검증되지 않음** — `GEE_PROJECT_ID` 확보 후 `pytest module_obs/tests/ -v`의 `test_live_fetch_returns_scenes_when_credentials_present`(현재 skip)를 통과시킬 것.
 
 ### Module CHG — 변화탐지 (`module_chg`)
 
@@ -286,7 +288,7 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 `change_type_hint`는 원인 진단이 아니라 **"무엇이 달라졌는지"에 대한 힌트**일 뿐이다 — §3.4의 범위 제한 원칙(종 판독 금지)을 지킨다. 폴백: Sentinel-2+1 융합 → Sentinel-2 단독(§4.3).
 
-**구현 상태(2026-08-29)**: `module_chg/run.py` — Module OBS를 baseline/current 두 번 호출해 NDVI/NDMI **scene 평균의 편차**로 `anomaly_score`를 계산한다. **중요한 근사**: 현재 `changed_area_ratio`는 진짜 픽셀 단위 변화면적이 아니라 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서 Sentinel Hub Process API 기반 pixel-wise diff로 교체 예정) — Backtest A(§10)에서 이 근사가 실제와 얼마나 다른지 반드시 검증할 것. `python -m pytest module_chg/tests/ -v`로 mock 기반 단위 테스트(자격증명 불필요) 통과 확인됨.
+**구현 상태(2026-08-29)**: `module_chg/run.py` — Module OBS를 baseline/current 두 번 호출해 NDVI/NDMI **scene 평균의 편차**로 `anomaly_score`를 계산한다. **중요한 근사**: 현재 `changed_area_ratio`는 진짜 픽셀 단위 변화면적이 아니라 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서 Earth Engine `reduceRegion` histogram 기반 pixel-wise diff로 교체 예정) — Backtest A(§10)에서 이 근사가 실제와 얼마나 다른지 반드시 검증할 것. `python -m pytest module_chg/tests/ -v`로 mock 기반 단위 테스트(자격증명 불필요) 통과 확인됨.
 
 ### Module AGG — GIS 공간 집계 (`module_agg`)
 
@@ -529,7 +531,7 @@ POST /reports/weekly
 | 8/29–8/31 | Scope Lock, 리포 세팅(이 문서) | README/ARCHITECTURE 확정, 공식 붙임1 PDF 재확인 |
 | 8/29 | **Data MVP 1단계 완료** — 유방동 85필지 중 82필지(96.5%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson` |
 | 9/1–9/5 | **Data MVP 2단계**(§3.2) | 6,275건 전체 확장, 미확인 3필지 원인 확인 |
-| 9/6–9/10 | Module OBS + CHG (2026-08-29 조기 착수, 코드 완료·Sentinel Hub 자격증명으로 실증 대기) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
+| 9/6–9/10 | Module OBS + CHG (2026-08-29 조기 착수, 코드 완료·GEE_PROJECT_ID 확보 후 실증 대기) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
 | 9/11–9/14 | Module AGG + RISK(rule) | 대상지 단위 feature, rule baseline, Top-N |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
 | 9/19–9/22 | Module O + UI | 지도·Priority Queue·Evidence Card |
