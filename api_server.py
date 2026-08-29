@@ -37,7 +37,9 @@ app = FastAPI(title="Waterside Guard API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    # 개발 서버(Next.js)가 매번 다른 포트로 뜰 수 있어(autoPort) localhost 전 포트를 허용한다.
+    # 프로토타입 범위 — 실제 배포 시 특정 origin으로 좁힐 것.
+    allow_origin_regex=r"http://localhost:\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )

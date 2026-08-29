@@ -198,6 +198,7 @@ module_field/                 # Module FIELD — 현장점검 입력 검증
   tests/                        # pytest, 모듈별 독립 실행 가능
 api_server.py                  # FastAPI — /sites, /priority-queue, /inspections 등
 tests/                          # api_server.py 통합 테스트
+ui/                              # Next.js + MapLibre 대시보드 (ui/README.md 참조)
 data/
   raw/                        # 원본 CSV (가공하지 않음)
   processed/                  # PNU→폴리곤, Priority Queue 등 가공 결과
@@ -213,6 +214,9 @@ python -m pytest -v   # .env가 있으면 라이브 GEE 테스트까지 실행(c
 # 실제 유방동 필지로 OBS→CHG→AGG→RISK 전체 파이프라인 실행 후 API 서버 기동
 PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit 10
 python -m uvicorn api_server:app --port 8001   # http://127.0.0.1:8001/priority-queue
+
+# 대시보드(다른 터미널)
+cd ui && npm install && npm run dev
 ```
 
 ---
@@ -223,7 +227,7 @@ python -m uvicorn api_server:app --port 8001   # http://127.0.0.1:8001/priority-
 |---|---|
 | 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
 | 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
-| 9/19–9/22 | **Module O·FIELD·API 서버 완료** (조기 착수) — `api_server.py`가 실제 파이프라인 결과를 서빙, `/inspections`로 현장결과 등록 시 상태 갱신 확인. 지도 대시보드 UI는 진행 중 |
+| 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
 | 9/23–9/27 | Backtest(baseline 대비 성능) + Evidence Agent |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 

@@ -471,6 +471,8 @@ POST /reports/weekly                 -- 미구현(Module AGENT 없음, §12)
 
 메인 KPI: `전체 대상지 / 고위험 대상지 / 미점검 고위험 / 이번주 점검완료 / 실제 이상확인 / Precision@K`
 
+**구현 상태(2026-08-29)**: `ui/`(Next.js + MapLibre GL JS)가 6개 중 4개를 구현했다 — Map, Priority Queue, Evidence Card, Inspection. **Before/After**(실제 위성영상 타일)는 아직 없다 — Module OBS의 `composite_ref`가 예약 필드로만 존재(§5 Module OBS 구현 상태). **Time Series**는 SAR 없이 NDVI만 순수 SVG 스파크라인으로 표시 중(외부 차트 라이브러리 없음, `components/TimeSeriesChart.tsx`). 메인 KPI 중 `Precision@K`는 Module VERIFY 미구현이라 아직 없다. 실제 브라우저에서 지도 클릭 → Evidence Card → 현장점검 등록 → Priority Queue 상태 갱신까지 end-to-end로 확인됨.
+
 ---
 
 ## 9. 불확실성 표기 원칙 (전 모듈 공통)
@@ -551,7 +553,7 @@ POST /reports/weekly                 -- 미구현(Module AGENT 없음, §12)
 | 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
 | 9/11–9/14 | **Module AGG + RISK(rule) 완료** (2026-08-29 조기 착수) — 유방동 실제 필지 10건으로 end-to-end 파이프라인(OBS→CHG→AGG→RISK) 실증까지 완료 | 대상지 단위 feature, rule baseline, `data/processed/yongin_yubang_priority_queue.geojson` |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
-| 9/19–9/22 | **Module O + FIELD + API 서버 완료**(2026-08-29 조기 착수), UI는 진행 중 | `api_server.py`(FastAPI, 6개 엔드포인트 테스트 완료), 지도·Priority Queue·Evidence Card UI |
+| 9/19–9/22 | **Module O + FIELD + API 서버 + UI 전부 완료**(2026-08-29 조기 착수) | `api_server.py`(FastAPI, 6개 엔드포인트), `ui/`(Next.js+MapLibre) — 지도 클릭→Evidence Card→현장점검 등록→큐 갱신까지 브라우저에서 end-to-end 확인 |
 | 9/23–9/25 | Module VERIFY | baseline 비교, Precision@K, Recall@K |
 | 9/26–9/27 | Module FIELD + AGENT | 점검표/주간 evidence report |
 | 9/28 | Red-Team | §11.3 공격 방어 리허설 |
@@ -568,8 +570,8 @@ POST /reports/weekly                 -- 미구현(Module AGENT 없음, §12)
 
 이 프로젝트는 Aquaguard처럼 여러 세션이 병렬로 작업하는 구조가 **아니다** — 사용자 1인 + Claude Code 세션이 순차적으로 §12 로드맵을 따라간다. 그래서 `contracts/` 폴더에 별도 JSON Schema 파일을 만들지 않았다 — 이 문서 §5의 예시 JSON이 유일한 소스 오브 트루스다. 새 모듈을 만들 때는 이 문서 §5를 먼저 갱신하고 코드를 짜라.
 
-**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP·Module OBS/CHG·Module AGG/RISK는 2026-08-29에 조기 완료됐고, `scripts/run_priority_queue_demo.py`로 유방동 10필지 end-to-end 실증까지 끝났다 — 다음은 **Module O(오케스트레이션) + UI**(§5, Top-N 큐를 웹 지도로 노출)다.
+**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP부터 Module OBS/CHG/AGG/RISK/O/FIELD, API 서버, UI까지 2026-08-29에 전부 조기 완료됐다 — 지도 클릭→Evidence Card→현장점검 등록까지 실제 브라우저에서 확인됨. 다음은 **Module VERIFY**(§5, §10 Backtest — 예측 vs 실측 비교, baseline 대비 성능)다.
 
-**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 `python -m pytest module_obs/ module_chg/ module_agg/ module_risk/ -v`(`.env`를 `conftest.py`가 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`.
+**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 저장소 루트에서 `python -m pytest -v`(`conftest.py`가 `.env`를 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`. 서버·UI를 띄우려면 `python -m uvicorn api_server:app --port 8001`(백엔드) 후 `cd ui && npm run dev`(프론트) — `ui/lib/api.ts`의 `NEXT_PUBLIC_API_BASE` 기본값이 `http://localhost:8001`.
 
 **알려진 한계(2026-08-29, 아직 안 고친 것)**: `scripts/run_priority_queue_demo.py`가 만드는 `site_attributes`는 전부 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·인접수계여부·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio` 두 요인(가중치 합 0.55)만으로 계산돼 최대치가 구조적으로 낮다 — 유방동 10필지 실증에서 전부 "정상"(risk_score 2~16)로 나온 것은 실제로 이상이 없어서일 수도 있지만, 요인 결측 때문에 점수 자체가 눌려 있을 가능성도 크다. `adjacent_to_water`는 실제로는 GEE의 수체 레이어(JRC Global Surface Water 등)로 계산 가능한 값이니 §12 B급 확장 우선순위로 다음에 붙일 것.
