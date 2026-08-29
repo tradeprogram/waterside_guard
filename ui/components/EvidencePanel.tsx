@@ -5,6 +5,7 @@ import { fetchEvidence, fetchTimeseries, type Site, type Scene } from "@/lib/api
 import TimeSeriesChart from "./TimeSeriesChart";
 import InspectionForm from "./InspectionForm";
 import AskAgent from "./AskAgent";
+import NdviThumbnails from "./NdviThumbnails";
 
 const FACTOR_LABEL: Record<string, string> = {
   anomaly_score_mean: "위성 이상도(계절 대비 변화)",
@@ -60,6 +61,8 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
           </p>
         )}
       </div>
+
+      <NdviThumbnails siteId={site.site_id} />
 
       <div>
         <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">위성 시계열 (NDVI)</h3>

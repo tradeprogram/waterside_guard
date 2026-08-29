@@ -66,6 +66,21 @@ def test_evidence():
     assert body["contributing_factors"][0]["factor"] == "anomaly_score_mean"
 
 
+def test_thumbnails_404_for_unknown_site():
+    r = client.get("/sites/NOPE/thumbnails")
+    assert r.status_code == 404
+
+
+def test_thumbnails_degrades_gracefully_without_gee(monkeypatch):
+    monkeypatch.delenv("GEE_PROJECT_ID", raising=False)
+    r = client.get("/sites/A1037/thumbnails")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["baseline"] is None
+    assert body["current"] is None
+    assert body["warnings"]
+
+
 def test_timeseries():
     r = client.get("/sites/A1037/timeseries")
     assert r.status_code == 200

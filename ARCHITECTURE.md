@@ -274,7 +274,7 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **폴백**: 구름 20% 이상인 장면은 자동 제외 후 최근 유효 장면으로 대체, `warnings`에 대체 사유 기록.
 
-**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. 현재 구현은 Sentinel-2만 지원한다(입력에 `sources` 필드는 없음 — 애초에 다중소스 스위칭을 만들지 않았다, Sentinel-1은 §3.4에 적어둔 것처럼 향후 확장). `composite_ref`는 지도에 실제 위성영상 타일을 얹을 때(Before/After Evidence Card, §8) 쓸 예약 필드로 코드에 남겨뒀지만 아직 채우지 않는다.
+**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. 현재 구현은 Sentinel-2만 지원한다(입력에 `sources` 필드는 없음 — 애초에 다중소스 스위칭을 만들지 않았다, Sentinel-1은 §3.4에 적어둔 것처럼 향후 확장). `composite_ref`는 여전히 항상 `null`이다 — 대신 같은 목적(지도에 실제 위성영상을 얹는 것)을 별도 모듈 `module_obs/thumbnail.py`가 담당하게 됐다(§8 Before/After 구현 상태 참조). `composite_ref` 필드 자체를 채우는 대신 완전히 분리된 이유: Module OBS의 `run()`(시계열 통계 조회)과 썸네일 생성은 호출 빈도·비용 특성이 달라서(전자는 배치, 후자는 site 1건씩 on-demand) 같은 함수에 얹으면 배치 조회 성능(§12 B급)이 오염된다.
 
 **유방동 AOI로 실제 검증됨** — `GEE_PROJECT_ID` 등록 후(Earth Engine API가 해당 Cloud 프로젝트에서 비활성 상태였던 걸 콘솔에서 활성화) 2026-06-01~08-25 구간에서 NDVI 0.51~0.58 수준의 실제 관측치를 받았다. **실증 중 발견·수정한 버그**: `CLOUDY_PIXEL_PERCENTAGE`는 Sentinel-2 타일(최대 110×110km) 전체 기준이라, 우리 AOI처럼 작은 영역은 타일 다른 곳의 구름 때문에 실제로는 맑은 장면도 걸러지는 문제가 실측으로 확인됐다. 그래서 타일 메타데이터 필터는 후보를 줄이는 넓은 예비필터(80%)로만 쓰고, 실제 채택 기준은 `reduceRegion`으로 계산한 **AOI 자체의 유효(비구름) 픽셀 비율**(`MIN_AOI_VALID_RATIO=0.5`)로 바꿨다. `pytest module_obs/tests/ -v`의 라이브 테스트(`test_live_fetch_returns_scenes_when_credentials_present`)가 실제 API 호출로 통과함을 확인 — `conftest.py`가 `.env`를 자동 로드해 pytest에서도 자격증명을 인식한다.
 
@@ -459,13 +459,14 @@ GET  /sites/{site_id}
 GET  /sites/{site_id}/timeseries
 GET  /priority-queue?week_of=...
 GET  /sites/{site_id}/evidence
+GET  /sites/{site_id}/thumbnails     -- §7 원안에 없던 추가: 선택 대상지의 NDVI Before/After 이미지(on-demand, §8)
 POST /inspections
 GET  /verify/backtest?period=...&k=10
 POST /reports/weekly
 POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGENT Q&A(§5)를 실제로 쓰려면 필요했음
 ```
 
-**구현 상태(2026-08-29)**: `api_server.py` — 위 목록 전부 구현·테스트 완료(`tests/test_api_server.py`, FastAPI `TestClient` 사용, GEE/Gemini 자격증명 불필요 — 둘 다 없으면 각 모듈이 자체 폴백으로 응답). 서버 시작 시 `data/processed/yongin_yubang_priority_queue.geojson`(Module RISK 조기 실증 결과, §5 Module RISK)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth Engine을 다시 부르지 않는다(§2.2 배치 모드 원칙). `/verify/backtest`는 store의 현재 risk_score + 등록된 현장점검 이력을 Module VERIFY로 채점한다 — 진짜 leakage-free backtest는 아직 아니다(§5 Module VERIFY 구현 상태 참조). `/sites/{site_id}/ask`·`/reports/weekly`는 Module AGENT를 감싼다 — `GEMINI_API_KEY`가 없으면 템플릿 폴백 응답을 그대로 반환한다(200 OK, `status:"degraded"`).
+**구현 상태(2026-08-29)**: `api_server.py` — 위 목록 전부 구현·테스트 완료(`tests/test_api_server.py`, FastAPI `TestClient` 사용, GEE/Gemini 자격증명 불필요 — 둘 다 없으면 각 모듈이 자체 폴백으로 응답). 서버 시작 시 스냅샷들(Module RISK 조기 실증 결과, §5 Module RISK)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth Engine을 다시 부르지 않는다(§2.2 배치 모드 원칙). `/verify/backtest`는 store의 현재 risk_score + 등록된 현장점검 이력을 Module VERIFY로 채점한다 — 진짜 leakage-free backtest는 아직 아니다(§5 Module VERIFY 구현 상태 참조). `/sites/{site_id}/ask`·`/reports/weekly`는 Module AGENT를 감싼다 — `GEMINI_API_KEY`가 없으면 템플릿 폴백 응답을 그대로 반환한다(200 OK, `status:"degraded"`). `/sites/{site_id}/thumbnails`만 예외적으로 Earth Engine을 실시간으로 부른다(선택된 site 1건에 한해서만, §5 Module OBS 구현 상태 참조) — 나머지 엔드포인트는 전부 사전 계산된 스냅샷만 읽는다.
 
 ---
 
@@ -484,7 +485,9 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 메인 KPI: `전체 대상지 / 고위험 대상지 / 미점검 고위험 / 이번주 점검완료 / 실제 이상확인 / Precision@K`
 
-**구현 상태(2026-08-29)**: `ui/`(Next.js + MapLibre GL JS)가 6개 중 4개를 구현했다 — Map, Priority Queue, Evidence Card, Inspection. **Before/After**(실제 위성영상 타일)는 아직 없다 — Module OBS의 `composite_ref`가 예약 필드로만 존재(§5 Module OBS 구현 상태). **Time Series**는 SAR 없이 NDVI만 순수 SVG 스파크라인으로 표시 중(외부 차트 라이브러리 없음, `components/TimeSeriesChart.tsx`). 메인 KPI 중 `Precision@K`는 Module VERIFY 미구현이라 아직 없다. 실제 브라우저에서 지도 클릭 → Evidence Card → 현장점검 등록 → Priority Queue 상태 갱신까지 end-to-end로 확인됨.
+**구현 상태(2026-08-29)**: `ui/`(Next.js + MapLibre GL JS)가 6개 중 5개를 구현했다 — Map, Priority Queue, **Before/After**, Time Series, Evidence Card, Inspection. **Time Series**는 SAR 없이 NDVI만 순수 SVG 스파크라인으로 표시 중(외부 차트 라이브러리 없음, `components/TimeSeriesChart.tsx`). 메인 KPI 중 `Precision@K`는 Module VERIFY가 구현됐지만 UI에는 아직 노출하지 않았다(백테스트는 `/verify/backtest`로만 조회 가능, §12 TODO). 실제 브라우저에서 지도 클릭 → Evidence Card → 현장점검 등록 → Priority Queue 상태 갱신까지 end-to-end로 확인됨.
+
+**Before/After 완료(2026-08-29, 사용자 지적 반영)**: "왜 위성지도인가"라는 질문에 답하기 위해 `module_obs/thumbnail.py`(Earth Engine `getThumbURL()`)로 실제 NDVI 컬러 이미지를 만들어 (1) Evidence Card에 기준기간·현재기간 나란히, (2) 선택된 대상지 위치에 지도 위 실제 좌표로 겹쳐서 보여준다(`components/NdviThumbnails.tsx`, `MapView.tsx`의 `ndvi-overlay` image source). 60개 전부를 미리 만들지 않고 선택한 site 1건만 그때 생성한다(§7 `GET /sites/{id}/thumbnails`, on-demand) — 배치 조회(§12 B급)의 이점을 스스로 깎아먹지 않기 위해서다. 실제 확인: 여주시 대신면 양촌리 369-5 필지에서 2024-06-10/2026-06-15 두 장의 실제 위성 이미지(각 6.4KB PNG)를 받아 브라우저에서 렌더링 확인.
 
 ---
 

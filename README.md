@@ -189,7 +189,7 @@ ARCHITECTURE.md             # 아키텍처 확정안 v1.0 — 정본(SoT)
 docs/                        # 원본 리서치 PDF, 핸드오프 브리프
 contracts/                   # 모듈별 입출력 예시 JSON (= ARCHITECTURE.md §5)
 common/                       # envelope·좌표변환 등 전 모듈 공유 유틸
-module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2), batch.py=다중 site 배치 조회
+module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2), batch.py=배치 조회, thumbnail.py=NDVI 이미지
 module_chg/                   # Module CHG — 변화탐지 (OBS 두 번 호출·이상도 계산)
 module_agg/                   # Module AGG — CHG 결과 + 대상지 속성 집계
 module_risk/                  # Module RISK — 규칙기반 risk_score 산정
@@ -236,7 +236,8 @@ cd ui && npm install && npm run dev
 | 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
 | 9/23–9/27 | **Module VERIFY·AGENT 전부 완료 + 실증 끝** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. `gemini-3.6-flash`로 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`) 실제 응답 확인 |
 | — | **8개 모듈 + API 서버 + UI 전부 완료·실증** — GEE·Gemini 둘 다 실제 API 키로 검증 |
-| — | **6개 시/군/구로 확대**(2026-08-29, 사용자 지적 반영) — 유방동만 보던 것을 양평군·가평군·광주시·남양주시·여주시까지 확대, `module_obs/batch.py`로 API 호출을 site 수가 아니라 이미지 수에만 비례하게 개선. 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
+| — | **6개 시/군/구로 확대**(2026-08-29, 사용자 지적 반영) — 유방동만 보던 것을 양평군·가평군·광주시·남양주시·여주시까지 확대, `module_obs/batch.py`로 API 호출을 site 수가 아니라 이미지 수에만 비례하게 개선 |
+| — | **Before/After NDVI 위성 이미지 추가**(2026-08-29, 사용자 지적 반영) — "왜 위성지도인가"에 답하기 위해 실제 NDVI 컬러 이미지를 Evidence Card와 지도 위 선택 위치에 표시(`module_obs/thumbnail.py`, `GET /sites/{id}/thumbnails`, on-demand). 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 
 전체 로드맵과 각 마일스톤의 완료 기준은 [ARCHITECTURE.md §12](ARCHITECTURE.md#12-개발-로드맵).

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { LngLatBounds, Map as MapLibreMap, type GeoJSONSource } from "maplibre-gl";
+import { LngLatBounds, Map as MapLibreMap, type GeoJSONSource, type ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Site } from "@/lib/api";
+import { fetchThumbnails, type Site } from "@/lib/api";
 
 // GeoJSON Polygon/MultiPolygon 좌표 배열을 재귀적으로 훑어 [lng, lat] 쌍만 뽑는다.
 // turf 같은 외부 라이브러리 없이 bbox 계산용으로만 쓴다.
@@ -97,6 +97,21 @@ export default function MapView({
       });
       map.on("mouseenter", "sites-fill", () => (map.getCanvas().style.cursor = "pointer"));
       map.on("mouseleave", "sites-fill", () => (map.getCanvas().style.cursor = ""));
+
+      // 선택된 대상지의 실제 NDVI 위성 이미지를 지도 위에 얹는 레이어 — 처음엔 소스가
+      // 없어야 하므로 화면 밖 아주 작은 좌표로 자리만 잡아둔다(빈 image source는 허용 안 됨).
+      map.addSource("ndvi-overlay", {
+        type: "image",
+        url:
+          "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7",
+        coordinates: [
+          [0, 0.0001],
+          [0.0001, 0.0001],
+          [0.0001, 0],
+          [0, 0],
+        ],
+      });
+      map.addLayer({ id: "ndvi-overlay-layer", type: "raster", source: "ndvi-overlay", paint: { "raster-opacity": 0.85 } });
     });
 
     return () => {
@@ -150,6 +165,46 @@ export default function MapView({
     if (map.isStyleLoaded()) render();
     else map.once("load", render);
   }, [sites, selectedSiteId]);
+
+  // 대상지를 선택하면: (1) 실제 NDVI 위성 이미지를 그 위치에 얹고 (2) 알아볼 수 있게 확대한다.
+  // 대상지 폴리곤 자체가 수백 m²로 작아서, 60개 전체를 보던 줌 레벨에서는 선택해도 안 보인다.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedSiteId) return;
+
+    let cancelled = false;
+    const site = sites.find((s) => s.site_id === selectedSiteId);
+
+    const apply = () => {
+      const source = map.getSource("ndvi-overlay") as ImageSource | undefined;
+      if (!source) return;
+
+      if (site?.geometry_geojson && "coordinates" in site.geometry_geojson) {
+        const points: [number, number][] = [];
+        collectLngLat(site.geometry_geojson.coordinates, points);
+        if (points.length > 0) {
+          const bounds = points.reduce((b, p) => b.extend(p), new LngLatBounds(points[0], points[0]));
+          map.fitBounds(bounds, { padding: 150, maxZoom: 18, duration: 500 });
+        }
+      }
+
+      fetchThumbnails(selectedSiteId)
+        .then((res) => {
+          if (cancelled || !res.current) return;
+          source.updateImage({ url: res.current.url, coordinates: res.current.image_coordinates });
+        })
+        .catch(() => {
+          /* 지도 오버레이는 부가 기능 — 실패해도 나머지 화면에 영향 없음 */
+        });
+    };
+
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSiteId, sites]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

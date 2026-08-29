@@ -29,12 +29,18 @@ from module_agent.run import run as agent_run
 from module_field.run import run as field_run
 from module_o.run import run as o_run
 from module_o.store import store
+from module_obs.thumbnail import run as thumbnail_run
 from module_verify.run import run as verify_run
 
 SNAPSHOT_PATHS = [
     Path("data/processed/yongin_yubang_priority_queue.geojson"),  # 실증 앵커(용인시 유방동, §3.1)
     Path("data/processed/hanriver_priority_queue.geojson"),  # 다른 시/군/구 표본(§12 B급 확장)
 ]
+
+# scripts/run_priority_queue_demo.py·run_priority_queue_batch.py와 반드시 동일해야 한다 —
+# 썸네일이 배치 파이프라인이 실제로 비교한 기간과 다른 기간의 영상을 보여주면 안 되므로.
+BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
+CURRENT_PERIOD = ["2026-06-01", "2026-08-25"]
 
 
 @asynccontextmanager
@@ -125,6 +131,32 @@ def get_timeseries(site_id: str) -> dict:
         "site_id": site_id,
         "baseline_scenes": entry.get("baseline_scenes", []),
         "current_scenes": entry.get("current_scenes", []),
+    }
+
+
+@app.get("/sites/{site_id}/thumbnails")
+def get_thumbnails(site_id: str) -> dict:
+    """선택된 대상지 1건에 대해서만 on-demand로 NDVI 썸네일을 생성한다(§ module_obs/thumbnail.py
+    구현 상태 참조) — 60개 전부를 미리 만들지 않는다. Earth Engine 호출이라 응답이
+    다른 엔드포인트보다 느릴 수 있다(보통 1~3초)."""
+    entry = store.get(site_id)
+    if entry is None:
+        raise HTTPException(404, f"site '{site_id}' not found")
+    geometry_4326 = entry.get("geometry_geojson")
+    if geometry_4326 is None:
+        raise HTTPException(404, f"site '{site_id}' has no geometry")
+
+    baseline = thumbnail_run(
+        {"site_id": site_id, "aoi_geometry_4326": geometry_4326, "date_range": BASELINE_PERIOD}
+    )
+    current = thumbnail_run(
+        {"site_id": site_id, "aoi_geometry_4326": geometry_4326, "date_range": CURRENT_PERIOD}
+    )
+    return {
+        "site_id": site_id,
+        "baseline": baseline["data"]["thumbnail"],
+        "current": current["data"]["thumbnail"],
+        "warnings": baseline["warnings"] + current["warnings"],
     }
 
 

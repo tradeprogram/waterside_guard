@@ -78,6 +78,16 @@ export function fetchTimeseries(siteId: string) {
   );
 }
 
+// [좌상단, 우상단, 우하단, 좌하단] — MapLibre image source가 요구하는 순서(api_server.py와 동일)
+type Corner = [number, number];
+export type Thumbnail = { url: string; image_coordinates: [Corner, Corner, Corner, Corner]; acquisition_date: string };
+
+export function fetchThumbnails(siteId: string) {
+  return getJson<{ site_id: string; baseline: Thumbnail | null; current: Thumbnail | null; warnings: string[] }>(
+    `/sites/${encodeURIComponent(siteId)}/thumbnails`
+  );
+}
+
 export async function postInspection(payload: {
   site_id: string;
   inspector_id: string;
