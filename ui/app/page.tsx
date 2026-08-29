@@ -44,7 +44,7 @@ export default function Home() {
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
         <div>
           <h1 className="text-lg font-bold">수변가드 AI</h1>
-          <p className="text-xs text-neutral-500">유방동 실증 AOI — 오늘 먼저 가봐야 할 곳</p>
+          <p className="text-xs text-neutral-500">한강유역 6개 시/군/구 — 오늘 먼저 가봐야 할 곳</p>
         </div>
         <span className="text-xs text-neutral-400">
           Top-{queue.length} · 미점검 {queue.filter((q) => q.status === "미점검").length}

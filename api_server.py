@@ -31,7 +31,10 @@ from module_o.run import run as o_run
 from module_o.store import store
 from module_verify.run import run as verify_run
 
-SNAPSHOT_PATH = Path("data/processed/yongin_yubang_priority_queue.geojson")
+SNAPSHOT_PATHS = [
+    Path("data/processed/yongin_yubang_priority_queue.geojson"),  # 실증 앵커(용인시 유방동, §3.1)
+    Path("data/processed/hanriver_priority_queue.geojson"),  # 다른 시/군/구 표본(§12 B급 확장)
+]
 
 
 @asynccontextmanager
@@ -63,14 +66,18 @@ def _json_field(value) -> list:
 
 
 def _load_snapshot() -> None:
-    """스냅샷 GeoJSON(EPSG:5179)을 읽어 store를 채운다. 파일이 없으면 빈 상태로 시작한다
-    (Module RISK를 아직 안 돌렸다는 뜻 — 예외를 던지지 않고 조용히 넘어간다, §4.2)."""
-    if not SNAPSHOT_PATH.exists():
-        return
-
+    """스냅샷 GeoJSON(EPSG:5179) 여러 개를 읽어 store를 채운다. 파일이 하나도 없으면 빈
+    상태로 시작한다(Module RISK를 아직 안 돌렸다는 뜻 — 예외를 던지지 않고 조용히
+    넘어간다, §4.2). site_id 접두어(YUBANG_/HANRIVER_)가 달라 겹치지 않는다."""
     import geopandas as gpd
 
-    gdf = gpd.read_file(SNAPSHOT_PATH)  # EPSG:5179
+    for snapshot_path in SNAPSHOT_PATHS:
+        if not snapshot_path.exists():
+            continue
+        _load_one_snapshot(gpd.read_file(snapshot_path))  # EPSG:5179
+
+
+def _load_one_snapshot(gdf) -> None:
     for row in gdf.itertuples():
         geometry_4326 = geometry_5179_to_4326(row.geometry.__geo_interface__)
         store.upsert_risk_result(

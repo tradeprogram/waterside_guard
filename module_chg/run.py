@@ -42,6 +42,43 @@ def _classify_change(ndvi_delta: float | None, ndmi_delta: float | None) -> str:
     return "bare_ground_increase"
 
 
+def compute_change_from_scenes(baseline_scenes: list[dict], current_scenes: list[dict]) -> dict | None:
+    """순수 함수 — Module OBS가 이미 반환한 scene 리스트만으로 anomaly_score 등을 계산한다.
+    OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이 이 함수를
+    공유해서 분류 임계치·정규화 상수가 두 곳에서 따로 놀지 않게 한다.
+
+    scene이 하나라도 비어 있으면 계산할 수 없으므로 None을 반환한다.
+    """
+    if not baseline_scenes or not current_scenes:
+        return None
+
+    baseline_ndvi = _mean([s["indices"].get("ndvi_mean") for s in baseline_scenes])
+    baseline_ndmi = _mean([s["indices"].get("ndmi_mean") for s in baseline_scenes])
+    current_ndvi = _mean([s["indices"].get("ndvi_mean") for s in current_scenes])
+    current_ndmi = _mean([s["indices"].get("ndmi_mean") for s in current_scenes])
+
+    ndvi_delta = (current_ndvi - baseline_ndvi) if (current_ndvi is not None and baseline_ndvi is not None) else None
+    ndmi_delta = (current_ndmi - baseline_ndmi) if (current_ndmi is not None and baseline_ndmi is not None) else None
+
+    magnitude = max(abs(ndvi_delta or 0.0), abs(ndmi_delta or 0.0))
+    anomaly_score = round(min(magnitude / 0.5, 1.0), 3)  # 0.5 편차를 사실상 최대치로 정규화(초기 가정치, Backtest A로 보정)
+    changed_area_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — 픽셀 단위 아님(모듈 docstring 참조)
+
+    ndvi_values = [s["indices"].get("ndvi_mean") for s in current_scenes if s["indices"].get("ndvi_mean") is not None]
+    ci: list[float] | None = None
+    if len(ndvi_values) >= 2:
+        stdev = statistics.pstdev(ndvi_values)
+        ci = [round(anomaly_score - stdev, 3), round(anomaly_score + stdev, 3)]
+
+    return {
+        "anomaly_score": anomaly_score,
+        "changed_area_ratio": changed_area_ratio,
+        "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
+        "source": "observed",
+        "confidence_interval": ci,
+    }
+
+
 def run(input: dict) -> dict:
     aoi_id = input.get("aoi_id", "unknown")
     site_geometry_5179 = input.get("site_geometry_5179")
@@ -74,7 +111,8 @@ def run(input: dict) -> dict:
     baseline_scenes = baseline_obs["data"].get("scenes", [])
     current_scenes = current_obs["data"].get("scenes", [])
 
-    if not baseline_scenes or not current_scenes:
+    computed = compute_change_from_scenes(baseline_scenes, current_scenes)
+    if computed is None:
         warnings.append(f"[{aoi_id}] 기준기간 또는 현재기간에 유효 관측이 없어 변화탐지를 건너뜁니다.")
         return make_envelope(
             {
@@ -90,36 +128,11 @@ def run(input: dict) -> dict:
             warnings=warnings,
         )
 
-    baseline_ndvi = _mean([s["indices"].get("ndvi_mean") for s in baseline_scenes])
-    baseline_ndmi = _mean([s["indices"].get("ndmi_mean") for s in baseline_scenes])
-    current_ndvi = _mean([s["indices"].get("ndvi_mean") for s in current_scenes])
-    current_ndmi = _mean([s["indices"].get("ndmi_mean") for s in current_scenes])
-
-    ndvi_delta = (current_ndvi - baseline_ndvi) if (current_ndvi is not None and baseline_ndvi is not None) else None
-    ndmi_delta = (current_ndmi - baseline_ndmi) if (current_ndmi is not None and baseline_ndmi is not None) else None
-
-    magnitude = max(abs(ndvi_delta or 0.0), abs(ndmi_delta or 0.0))
-    anomaly_score = round(min(magnitude / 0.5, 1.0), 3)  # 0.5 편차를 사실상 최대치로 정규화(초기 가정치, Backtest A로 보정)
-    changed_area_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — 픽셀 단위 아님(위 docstring 참조)
-
-    ndvi_values = [s["indices"].get("ndvi_mean") for s in current_scenes if s["indices"].get("ndvi_mean") is not None]
-    ci: list[float] | None = None
-    if len(ndvi_values) >= 2:
-        stdev = statistics.pstdev(ndvi_values)
-        ci = [round(anomaly_score - stdev, 3), round(anomaly_score + stdev, 3)]
-
     fallback_tier = min(baseline_obs["fallback_tier"], current_obs["fallback_tier"])
     status = "ok" if fallback_tier == 1 else "degraded"
 
     return make_envelope(
-        {
-            "aoi_id": aoi_id,
-            "anomaly_score": anomaly_score,
-            "changed_area_ratio": changed_area_ratio,
-            "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
-            "source": "observed",
-            "confidence_interval": ci,
-        },
+        {"aoi_id": aoi_id, **computed},
         status=status,
         fallback_tier=fallback_tier,
         warnings=warnings,

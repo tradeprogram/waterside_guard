@@ -173,7 +173,7 @@ sequenceDiagram
 | `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체 6,275행 (PNU/소재지/기준일, **좌표 없음**) | `data/raw/`에 배치 완료 |
 | `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링 85행 — 삼성전자·한강유역환경청 협력 복원사업(약 33만㎡) 부지, 실증 앵커 | `data/raw/`에 배치 완료 |
 | V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | **유방동 82/85필지(96.5%) + 한강유역 전체 5,526/6,275필지(88.1%) 복원 완료** — `scripts/fetch_parcel_geometry.py` |
-| Sentinel-2 | 광학 위성 시계열 (Google Earth Engine) | **실증 완료** — `module_obs/`가 유방동 AOI에서 실제 NDVI/NDMI 시계열 수신 확인 |
+| Sentinel-2 | 광학 위성 시계열 (Google Earth Engine) | **실증 완료, 6개 시/군/구로 확대** — `module_obs/batch.py`(배치 조회, 이미지 수에만 비례하는 API 호출)로 60필지 처리 |
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
@@ -189,7 +189,7 @@ ARCHITECTURE.md             # 아키텍처 확정안 v1.0 — 정본(SoT)
 docs/                        # 원본 리서치 PDF, 핸드오프 브리프
 contracts/                   # 모듈별 입출력 예시 JSON (= ARCHITECTURE.md §5)
 common/                       # envelope·좌표변환 등 전 모듈 공유 유틸
-module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2)
+module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2), batch.py=다중 site 배치 조회
 module_chg/                   # Module CHG — 변화탐지 (OBS 두 번 호출·이상도 계산)
 module_agg/                   # Module AGG — CHG 결과 + 대상지 속성 집계
 module_risk/                  # Module RISK — 규칙기반 risk_score 산정
@@ -213,9 +213,13 @@ scripts/                      # 파이프라인 스크립트 (Milestone별)
 pip install -r requirements.txt
 python -m pytest -v   # .env가 있으면 라이브 GEE 테스트까지 실행(conftest.py가 자동 로드)
 
-# 실제 유방동 필지로 OBS→CHG→AGG→RISK 전체 파이프라인 실행 후 API 서버 기동
+# 실제 유방동 필지로 OBS→CHG→AGG→RISK 전체 파이프라인 실행
 PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit 10
-python -m uvicorn api_server:app --port 8001   # http://127.0.0.1:8001/priority-queue
+
+# 다른 시/군/구로 확대 — site당 개별 호출이 아니라 배치(reduceRegions)로 처리
+PYTHONPATH=. python scripts/run_priority_queue_batch.py --per-region 10
+
+python -m uvicorn api_server:app --port 8001   # http://127.0.0.1:8001/priority-queue (두 결과 모두 서빙)
 
 # 대시보드(다른 터미널)
 cd ui && npm install && npm run dev
@@ -231,7 +235,8 @@ cd ui && npm install && npm run dev
 | 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
 | 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
 | 9/23–9/27 | **Module VERIFY·AGENT 전부 완료 + 실증 끝** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. `gemini-3.6-flash`로 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`) 실제 응답 확인 |
-| — | **8개 모듈(OBS/CHG/AGG/RISK/O/FIELD/VERIFY/AGENT) + API 서버 + UI 전부 완료·실증** — GEE·Gemini 둘 다 실제 API 키로 검증. 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
+| — | **8개 모듈 + API 서버 + UI 전부 완료·실증** — GEE·Gemini 둘 다 실제 API 키로 검증 |
+| — | **6개 시/군/구로 확대**(2026-08-29, 사용자 지적 반영) — 유방동만 보던 것을 양평군·가평군·광주시·남양주시·여주시까지 확대, `module_obs/batch.py`로 API 호출을 site 수가 아니라 이미지 수에만 비례하게 개선. 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 
 전체 로드맵과 각 마일스톤의 완료 기준은 [ARCHITECTURE.md §12](ARCHITECTURE.md#12-개발-로드맵).

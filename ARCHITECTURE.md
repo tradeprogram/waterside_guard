@@ -278,6 +278,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **유방동 AOI로 실제 검증됨** — `GEE_PROJECT_ID` 등록 후(Earth Engine API가 해당 Cloud 프로젝트에서 비활성 상태였던 걸 콘솔에서 활성화) 2026-06-01~08-25 구간에서 NDVI 0.51~0.58 수준의 실제 관측치를 받았다. **실증 중 발견·수정한 버그**: `CLOUDY_PIXEL_PERCENTAGE`는 Sentinel-2 타일(최대 110×110km) 전체 기준이라, 우리 AOI처럼 작은 영역은 타일 다른 곳의 구름 때문에 실제로는 맑은 장면도 걸러지는 문제가 실측으로 확인됐다. 그래서 타일 메타데이터 필터는 후보를 줄이는 넓은 예비필터(80%)로만 쓰고, 실제 채택 기준은 `reduceRegion`으로 계산한 **AOI 자체의 유효(비구름) 픽셀 비율**(`MIN_AOI_VALID_RATIO=0.5`)로 바꿨다. `pytest module_obs/tests/ -v`의 라이브 테스트(`test_live_fetch_returns_scenes_when_credentials_present`)가 실제 API 호출로 통과함을 확인 — `conftest.py`가 `.env`를 자동 로드해 pytest에서도 자격증명을 인식한다.
 
+**배치 조회 추가(`module_obs/batch.py`, 2026-08-29, 사용자 지적 반영)**: "왜 유방동만 보는가"라는 실제 질문에 답하려고 여러 시/군/구로 확대하려니, `run()`(site 1개당 개별 `reduceRegion`+`aggregate_array` 4회 호출) 방식으로는 site가 늘어날수록 API 왕복이 site 수에 비례해 폭증해서 비현실적이었다. `run_batch(sites, date_range)`는 `Image.reduceRegions(collection=<여러 site의 FeatureCollection>)`를 이미지(관측 장면)마다 한 번만 호출하고 `.flatten()`으로 합쳐 **전체를 단일 `getInfo()` 호출**로 가져온다 — 왕복 횟수가 site 수가 아니라 이미지 수에만 비례한다. 실측: 5개 시/군/구·50필지를 기준기간·현재기간 각 1회씩, 총 2번의 배치 호출로 전부 처리(50필지를 개별 호출했다면 최대 400회 왕복이 필요했을 것). `pytest module_obs/tests/test_batch.py -v` 라이브 테스트로 2개 site 동시 조회 확인.
+
 ### Module CHG — 변화탐지 (`module_chg`)
 
 ```jsonc
@@ -294,6 +296,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 `change_type_hint`는 원인 진단이 아니라 **"무엇이 달라졌는지"에 대한 힌트**일 뿐이다 — §3.4의 범위 제한 원칙(종 판독 금지)을 지킨다. 폴백: Sentinel-2+1 융합 → Sentinel-2 단독(§4.3).
 
 **구현 상태(2026-08-29)**: `module_chg/run.py` — Module OBS를 baseline/current 두 번 호출해 NDVI/NDMI **scene 평균의 편차**로 `anomaly_score`를 계산한다. **중요한 근사**: 현재 `changed_area_ratio`는 진짜 픽셀 단위 변화면적이 아니라 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서 Earth Engine `reduceRegion` histogram 기반 pixel-wise diff로 교체 예정) — Backtest A(§10)에서 이 근사가 실제와 얼마나 다른지 반드시 검증할 것. `python -m pytest module_chg/tests/ -v`로 mock 기반 단위 테스트(자격증명 불필요) 통과 확인됨.
+
+**리팩터링(2026-08-29)**: 이상도 계산 로직을 `compute_change_from_scenes(baseline_scenes, current_scenes)` 순수 함수로 분리했다 — `run()`은 이 함수를 부르기 전에 Module OBS를 호출할 뿐이다. 배치 파이프라인(`scripts/run_priority_queue_batch.py`)이 `module_obs.batch.run_batch()`로 얻은 scene 리스트에 이 함수를 그대로 재사용해서, 분류 임계치·정규화 상수(`ANOMALY_THRESHOLD_FOR_CHANGE` 등)가 단일/배치 두 경로에서 따로 놀지 않는다.
 
 ### Module AGG — GIS 공간 집계 (`module_agg`)
 
@@ -565,11 +569,12 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 | 9/19–9/22 | **Module O + FIELD + API 서버 + UI 전부 완료**(2026-08-29 조기 착수) | `api_server.py`(FastAPI, 6개 엔드포인트), `ui/`(Next.js+MapLibre) — 지도 클릭→Evidence Card→현장점검 등록→큐 갱신까지 브라우저에서 end-to-end 확인 |
 | 9/23–9/25 | **Module VERIFY 완료**(2026-08-29 조기 착수) — Precision@K·Recall@Top20%·baseline 비교·leakage 가드, `GET /verify/backtest` 연결 | baseline 비교, Precision@K, Recall@K |
 | 9/26–9/27 | **Module AGENT 완료 + 실제 Gemini 검증까지 끝남**(2026-08-29 조기 착수) | `/sites/{id}/ask`, `POST /reports/weekly`, `gemini-3.6-flash`로 실제 응답 확인 |
+| — | **B급 확장 일부 조기 완료(2026-08-29, 사용자 지적 반영)** — "왜 유방동만 보는가"에 답하기 위해 여러 시/군/구로 확대·배치 처리 성능 개선 | `module_obs/batch.py`(`reduceRegions` 기반, 이미지 수에만 비례하는 호출), `scripts/run_priority_queue_batch.py`, `data/processed/hanriver_priority_queue.geojson`(5개 시/군/구 50필지) |
 | 9/28 | Red-Team | §11.3 공격 방어 리허설 |
 | 9/29 | 제출본 Lock | 문장·도표·수치·인용 최종 검증 |
 | 9/30 이전 | 제출 | 마감 당일이 아니라 전날 제출 권장 |
 
-**B급 확장(MVP 이후 시간 남으면)**: Sentinel-1 이벤트 트리거 모드(§2.2), ML ranking, 강우·수문 API 연동, 여러 수계 확대.
+**B급 확장(MVP 이후 시간 남으면)**: Sentinel-1 이벤트 트리거 모드(§2.2), ML ranking, 강우·수문 API 연동. ~~여러 수계 확대~~는 위에서 조기 완료(단, 5,526필지 전체가 아니라 5개 시/군/구·50필지 표본 — 전체 확장은 여전히 후속 과제).
 
 **코딩과 별개로 진행되는 작업**(이 리포 담당 아님): 참가신청서·개인정보동의서 작성, 제안서 초안→공식 붙임2 HWP 양식 이관(익명성 유지 필수), Backtest 수치 확보 후 기대효과 섹션 반영, ZIP 패키징(`공모분야번호_신청자명`).
 
