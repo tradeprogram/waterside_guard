@@ -367,6 +367,8 @@ risk_score = 100 × clip(
 
 **상태머신**(대상지 단위): `관측 → 변화탐지 → 집계 → 위험도산정 → 우선순위큐등록 → 현장점검등록 → 결과입력 → 검증완료`. 담당자 승인 게이트는 없다(재난 대응형 시스템이 아니므로 human-in-the-loop이 이미 "현장점검을 실제로 갈지 말지" 판단 자체에 있음 — Aquaguard의 관공서 모드 승인 게이트 같은 별도 장치 불필요).
 
+**구현 상태(2026-08-29)**: `module_o/run.py` + `module_o/store.py` — Module RISK 결과를 받아 정렬·순번 부여만 한다(위험도 계산은 하지 않음, §0.4). `SiteStateStore`는 프로세스 인메모리 dict(Aquaguard의 `AlertStore` 패턴)로 8단계 상태를 추적하지만, **현장점검이 들어와도 "검증완료"로 자동 전이시키지 않는다** — Module VERIFY가 아직 없어서 검증됐다고 주장하면 거짓이 되기 때문(§ Module FIELD 구현 상태 참조). 대신 "결과입력" 단계에 머문다. `pytest module_o/tests/ -v` 통과.
+
 ### Module FIELD — 현장 피드백 (`module_field`)
 
 ```jsonc
@@ -380,6 +382,8 @@ risk_score = 100 × clip(
 // output (data)
 { "site_id": "A1037", "inspection_id": "INSP-20260902-A1037", "status": "완료" }
 ```
+
+**구현 상태(2026-08-29)**: `module_field/run.py` — 입력 검증과 `inspection_id` 발급만 한다. 상태 저장(결과입력 단계로 전이)은 이 모듈이 아니라 호출부(`api_server.py`)가 `module_o.store.record_inspection()`을 별도로 호출해서 한다 — Module FIELD는 "무엇을 기록할지 검증"만, Module O는 "상태를 어떻게 바꿀지"만 책임지는 경계를 유지한다. `pytest module_field/tests/ -v` 통과.
 
 ### Module VERIFY — 검증/Backtest 엔진 (`module_verify`)
 
@@ -444,9 +448,11 @@ GET  /sites/{site_id}/timeseries
 GET  /priority-queue?week_of=...
 GET  /sites/{site_id}/evidence
 POST /inspections
-GET  /verify/backtest?period=...
-POST /reports/weekly
+GET  /verify/backtest?period=...     -- 미구현(Module VERIFY 없음, §12)
+POST /reports/weekly                 -- 미구현(Module AGENT 없음, §12)
 ```
+
+**구현 상태(2026-08-29)**: `api_server.py` — 위 목록 중 `/verify/backtest`·`/reports/weekly`를 뺀 나머지 전부 구현·테스트 완료(`tests/test_api_server.py`, FastAPI `TestClient` 사용, GEE 자격증명 불필요). 서버 시작 시 `data/processed/yongin_yubang_priority_queue.geojson`(Module RISK 조기 실증 결과, §5 Module RISK)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth Engine을 다시 부르지 않는다(§2.2 배치 모드 원칙). 없는 두 엔드포인트는 아예 라우트를 만들지 않았다 — 있는 척 스텁을 두지 않는다.
 
 ---
 
@@ -545,7 +551,7 @@ POST /reports/weekly
 | 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
 | 9/11–9/14 | **Module AGG + RISK(rule) 완료** (2026-08-29 조기 착수) — 유방동 실제 필지 10건으로 end-to-end 파이프라인(OBS→CHG→AGG→RISK) 실증까지 완료 | 대상지 단위 feature, rule baseline, `data/processed/yongin_yubang_priority_queue.geojson` |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
-| 9/19–9/22 | Module O + UI | 지도·Priority Queue·Evidence Card |
+| 9/19–9/22 | **Module O + FIELD + API 서버 완료**(2026-08-29 조기 착수), UI는 진행 중 | `api_server.py`(FastAPI, 6개 엔드포인트 테스트 완료), 지도·Priority Queue·Evidence Card UI |
 | 9/23–9/25 | Module VERIFY | baseline 비교, Precision@K, Recall@K |
 | 9/26–9/27 | Module FIELD + AGENT | 점검표/주간 evidence report |
 | 9/28 | Red-Team | §11.3 공격 방어 리허설 |

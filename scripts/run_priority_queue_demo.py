@@ -22,7 +22,9 @@ from shapely.geometry import mapping
 
 from module_agg.run import run as agg_run
 from module_chg.run import run as chg_run
+from module_obs.run import run as obs_run
 from module_risk.run import run as risk_run
+from common.geo import geometry_5179_to_4326
 
 BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
 CURRENT_PERIOD = ["2026-06-01", "2026-08-25"]
@@ -68,6 +70,12 @@ def main() -> None:
 
         risk_result = risk_run({"site_id": site_id, "features": agg_result["data"]["features"]})
 
+        # Evidence Card/Time Series 화면(§8)이 쓸 원자료 — CHG는 집계값만 반환하므로
+        # 장면 단위 시계열은 OBS를 한 번 더 불러 별도로 확보한다(재사용 아님, §12 TODO 참조).
+        geometry_4326 = geometry_5179_to_4326(geometry_5179)
+        baseline_obs = obs_run({"aoi_id": site_id, "date_range": BASELINE_PERIOD, "aoi_geometry_4326": geometry_4326})
+        current_obs = obs_run({"aoi_id": site_id, "date_range": CURRENT_PERIOD, "aoi_geometry_4326": geometry_4326})
+
         rows.append(
             {
                 "site_id": site_id,
@@ -79,6 +87,9 @@ def main() -> None:
                 "anomaly_score": chg_result["data"].get("anomaly_score"),
                 "change_type_hint": chg_result["data"].get("change_type_hint"),
                 "chg_status": chg_result["status"],
+                "contributing_factors_json": json.dumps(risk_result["data"]["contributing_factors"], ensure_ascii=False),
+                "baseline_scenes_json": json.dumps(baseline_obs["data"].get("scenes", []), ensure_ascii=False),
+                "current_scenes_json": json.dumps(current_obs["data"].get("scenes", []), ensure_ascii=False),
                 "geometry": row.geometry,
             }
         )
