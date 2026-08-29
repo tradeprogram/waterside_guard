@@ -5,9 +5,8 @@
 실증 결과)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth
 Engine을 다시 부르지 않는다(배치 계산 → 빠른 조회 API라는 §2.2 원칙).
 
-`GET /verify/backtest`, `POST /reports/weekly`는 아직 없다 — Module
-VERIFY/AGENT가 구현되지 않았다(§12 로드맵). 없는 기능을 있는 척 노출하지
-않는다.
+`POST /reports/weekly`는 아직 없다 — Module AGENT가 구현되지 않았다(§12
+로드맵). 없는 기능을 있는 척 노출하지 않는다.
 """
 from __future__ import annotations
 
@@ -23,6 +22,7 @@ from common.geo import geometry_5179_to_4326
 from module_field.run import run as field_run
 from module_o.run import run as o_run
 from module_o.store import store
+from module_verify.run import run as verify_run
 
 SNAPSHOT_PATH = Path("data/processed/yongin_yubang_priority_queue.geojson")
 
@@ -142,6 +142,39 @@ def get_priority_queue(week_of: str = "current") -> dict:
         for e in entries
     ]
     result = o_run({"week_of": week_of, "risk_results": risk_results})
+    if result["status"] == "error":
+        raise HTTPException(500, result["warnings"])
+    return result
+
+
+@app.get("/verify/backtest")
+def get_backtest(period: str = "current", k: int = 10) -> dict:
+    """모든 site의 '현재' risk_score를 predictions로, 등록된 현장점검 이력을
+    field_results로 써서 Module VERIFY를 돌린다.
+
+    **한계**: 진짜 leakage-free backtest가 아니다 — predictions가 "그 예측
+    시점 이전 데이터로만 재실행한 결과"가 아니라 지금 store에 있는 최신
+    risk_score를 그대로 쓴다. 과거 특정 시점의 예측을 재현하려면 예측
+    스냅샷을 시계열로 저장하는 인프라가 필요한데 아직 없다(§12 TODO). 그래도
+    Module VERIFY의 leakage 경고(§ Module VERIFY 구현 상태)는 그대로
+    작동한다 — inspected_at이 있는 field_result에 한해 확인된다.
+    """
+    entries = store.all()
+    predictions = [{"site_id": e["site_id"], "risk_score": e.get("risk_score")} for e in entries]
+    field_results = []
+    for e in entries:
+        if not e.get("inspections"):
+            continue
+        latest = e["inspections"][-1]
+        field_results.append(
+            {
+                "site_id": e["site_id"],
+                "actual_anomaly_found": latest.get("actual_anomaly_found"),
+                "inspected_at": latest.get("inspected_at"),
+            }
+        )
+
+    result = verify_run({"period": [period, period], "predictions": predictions, "field_results": field_results, "k": k})
     if result["status"] == "error":
         raise HTTPException(500, result["warnings"])
     return result

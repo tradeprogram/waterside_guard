@@ -99,6 +99,33 @@ def test_create_inspection_updates_status():
     assert r2.json()["data"]["priority_queue"][0]["status"] == "점검완료"
 
 
+def test_backtest_with_no_inspections_returns_degraded():
+    r = client.get("/verify/backtest")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "degraded"
+    assert body["data"]["labeled_site_count"] == 0
+
+
+def test_backtest_after_inspection_scores_it():
+    client.post(
+        "/inspections",
+        json={
+            "site_id": "A1037",
+            "inspector_id": "staff_003",
+            "inspected_at": "2026-09-02T10:15:00+09:00",
+            "actual_anomaly_found": True,
+            "anomaly_category": "식생교란",
+        },
+    )
+    r = client.get("/verify/backtest?k=1")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["data"]["labeled_site_count"] == 1
+    assert body["data"]["positive_count"] == 1
+    assert body["data"]["precision_at_k"]["value"] == 1.0
+
+
 def test_create_inspection_invalid_category_rejected():
     payload = {
         "site_id": "A1037",
