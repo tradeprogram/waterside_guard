@@ -177,6 +177,8 @@ sequenceDiagram
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
+**현재 가장 큰 한계**: `risk_score`를 계산하는 `site_attributes`(복원경과일·최근점검일·인접수계여부·과거이상이력)는 KECI 내부 자산 DB에서 와야 하는데, 이 프로토타입은 그 DB에 접근할 방법이 없다. 지금은 위성 관측 요인(`anomaly_score_mean`+`changed_area_ratio`, 가중치 합 0.55)만으로 점수를 매기고 있어 최대 점수가 구조적으로 낮게 나온다 — 자세한 내용은 [ARCHITECTURE.md §13 "알려진 한계"](ARCHITECTURE.md#13-세션-브리핑--다음에-이-리포를-여는-claude-code-세션에게).
+
 ---
 
 ## 저장소 구조
@@ -189,10 +191,12 @@ contracts/                   # 모듈별 입출력 예시 JSON (= ARCHITECTURE.m
 common/                       # envelope·좌표변환 등 전 모듈 공유 유틸
 module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2)
 module_chg/                   # Module CHG — 변화탐지 (OBS 두 번 호출·이상도 계산)
+module_agg/                   # Module AGG — CHG 결과 + 대상지 속성 집계
+module_risk/                  # Module RISK — 규칙기반 risk_score 산정
   tests/                        # pytest, 모듈별 독립 실행 가능
 data/
   raw/                        # 원본 CSV (가공하지 않음)
-  processed/                  # PNU→폴리곤 등 가공 결과
+  processed/                  # PNU→폴리곤, Priority Queue 등 가공 결과
 scripts/                      # 파이프라인 스크립트 (Milestone별)
 ```
 
@@ -200,7 +204,10 @@ scripts/                      # 파이프라인 스크립트 (Milestone별)
 
 ```bash
 pip install -r requirements.txt
-python -m pytest module_obs/tests/ module_chg/tests/ -v   # .env가 있으면 라이브 GEE 테스트까지 실행(conftest.py가 자동 로드)
+python -m pytest module_obs/ module_chg/ module_agg/ module_risk/ -v   # .env가 있으면 라이브 GEE 테스트까지 실행(conftest.py가 자동 로드)
+
+# 실제 유방동 필지로 OBS→CHG→AGG→RISK 전체 파이프라인 실행
+PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit 10
 ```
 
 ---
@@ -210,9 +217,8 @@ python -m pytest module_obs/tests/ module_chg/tests/ -v   # .env가 있으면 �
 | 기간 | 목표 |
 |---|---|
 | 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
-| 8/29 | **Module OBS·CHG 실증 완료** (조기 착수, Google Earth Engine) — 유방동 AOI 실제 NDVI/NDMI 시계열 수신 확인 |
-| 9/11–9/14 | Module AGG + RISK(규칙기반 Risk Engine) |
-| 9/15–9/22 | 지도 대시보드 + Priority Queue UI |
+| 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
+| 9/19–9/22 | Module O(오케스트레이션) + 지도 대시보드 UI |
 | 9/23–9/27 | Backtest(baseline 대비 성능) + Evidence Agent |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 

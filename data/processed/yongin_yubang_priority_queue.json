@@ -1,0 +1,122 @@
+[
+  {
+    "rank": 1,
+    "site_id": "YUBANG_4146110500100780003",
+    "pnu": "4146110500100780003",
+    "jibun": "78-3답",
+    "addr": "경기도 용인시 처인구 유방동 78-3",
+    "risk_score": 16,
+    "risk_tier": "정상",
+    "anomaly_score": 0.231,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 2,
+    "site_id": "YUBANG_4146110500101400001",
+    "pnu": "4146110500101400001",
+    "jibun": "140-1전",
+    "addr": "경기도 용인시 처인구 유방동 140-1",
+    "risk_score": 13,
+    "risk_tier": "정상",
+    "anomaly_score": 0.183,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 3,
+    "site_id": "YUBANG_4146110500100760003",
+    "pnu": "4146110500100760003",
+    "jibun": "76-3장",
+    "addr": "경기도 용인시 처인구 유방동 76-3",
+    "risk_score": 13,
+    "risk_tier": "정상",
+    "anomaly_score": 0.191,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 4,
+    "site_id": "YUBANG_4146110500100760009",
+    "pnu": "4146110500100760009",
+    "jibun": "76-9전",
+    "addr": "경기도 용인시 처인구 유방동 76-9",
+    "risk_score": 11,
+    "risk_tier": "정상",
+    "anomaly_score": 0.159,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 5,
+    "site_id": "YUBANG_4146110500100760006",
+    "pnu": "4146110500100760006",
+    "jibun": "76-6전",
+    "addr": "경기도 용인시 처인구 유방동 76-6",
+    "risk_score": 9,
+    "risk_tier": "정상",
+    "anomaly_score": 0.135,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 6,
+    "site_id": "YUBANG_4146110500100710012",
+    "pnu": "4146110500100710012",
+    "jibun": "71-12전",
+    "addr": "경기도 용인시 처인구 유방동 71-12",
+    "risk_score": 9,
+    "risk_tier": "정상",
+    "anomaly_score": 0.129,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 7,
+    "site_id": "YUBANG_4146110500100710013",
+    "pnu": "4146110500100710013",
+    "jibun": "71-13전",
+    "addr": "경기도 용인시 처인구 유방동 71-13",
+    "risk_score": 6,
+    "risk_tier": "정상",
+    "anomaly_score": 0.084,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 8,
+    "site_id": "YUBANG_4146110500100750000",
+    "pnu": "4146110500100750000",
+    "jibun": "75전",
+    "addr": "경기도 용인시 처인구 유방동 75",
+    "risk_score": 5,
+    "risk_tier": "정상",
+    "anomaly_score": 0.077,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 9,
+    "site_id": "YUBANG_4146110500100710001",
+    "pnu": "4146110500100710001",
+    "jibun": "71-1대",
+    "addr": "경기도 용인시 처인구 유방동 71-1",
+    "risk_score": 4,
+    "risk_tier": "정상",
+    "anomaly_score": 0.054,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  },
+  {
+    "rank": 10,
+    "site_id": "YUBANG_4146110500100710014",
+    "pnu": "4146110500100710014",
+    "jibun": "71-14도",
+    "addr": "경기도 용인시 처인구 유방동 71-14",
+    "risk_score": 2,
+    "risk_tier": "정상",
+    "anomaly_score": 0.035,
+    "change_type_hint": "no_significant_change",
+    "chg_status": "ok"
+  }
+]

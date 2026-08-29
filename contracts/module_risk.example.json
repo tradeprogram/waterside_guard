@@ -3,11 +3,14 @@
   "fallback_tier": 1,
   "data": {
     "site_id": "A1037",
-    "risk_score": 87,
-    "risk_tier": "1순위",
+    "risk_score": 54,
+    "risk_tier": "2순위",
     "contributing_factors": [
-      { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.35 },
-      { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.20 }
+      { "factor": "anomaly_score_mean", "value": 0.72, "weight": 0.35 },
+      { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.2 },
+      { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.15 },
+      { "factor": "adjacent_to_water", "value": true, "weight": 0.15 },
+      { "factor": "past_anomaly_count", "value": 1, "weight": 0.15 }
     ],
     "model_version": "rule_v1",
     "source": "rule_based"

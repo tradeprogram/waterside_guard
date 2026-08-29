@@ -310,6 +310,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
     "last_inspection_days_ago": 63, "past_anomaly_count": 1 } }
 ```
 
+**구현 상태(2026-08-29)**: `module_agg/run.py` — Module CHG 결과(들)를 평균해 `anomaly_score_mean`/`changed_area_ratio`를 만들고, `site_attributes`는 그대로 통과시킨다. **중요한 제약**: `site_attributes`(복원경과일·최근점검일·인접수계여부·과거이상이력)는 KECI 내부 자산 DB에서 와야 하는데 이 프로토타입은 접근권한이 없다(개발_핸드오프_브리프 §2). 현재는 호출부가 채울 수 있는 값만 채우고 나머지는 `null`로 둔다 — Module RISK가 `null`을 "0 기여"로 안전하게 처리한다(아래 참조). `pytest module_agg/tests/ -v` 통과.
+
 ### Module RISK — 위험도 산정 (`module_risk`)
 
 > **방법론 확정**: 처음부터 DNN을 쓰지 않는다. 1단계는 **규칙+통계 이상탐지**(explainable, label 불필요), label이 충분히 쌓이면 2단계로 **LightGBM/XGBoost ranking**을 얹는다(§6). 공모전에서 DNN을 억지로 넣는 것은 오히려 감점 요소가 될 수 있다.
@@ -321,12 +323,15 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
     "adjacent_to_water": true, "restoration_elapsed_days": 420,
     "last_inspection_days_ago": 63, "past_anomaly_count": 1 } }
 
-// output (data) — risk_score가 최종 output
-{ "site_id": "A1037", "risk_score": 87, "risk_tier": "1순위",
-  // risk_tier ∈ {"1순위","2순위","3순위","정상"}
+// output (data) — risk_score가 최종 output. 아래 값은 module_risk/run.py 실제 실행 결과(2026-08-29 검증)
+{ "site_id": "A1037", "risk_score": 54, "risk_tier": "2순위",
+  // risk_tier ∈ {"1순위"(>=70),"2순위"(>=50),"3순위"(>=30),"정상"}. "rank"(대기열 순번, §Module O)와는 별개 개념
   "contributing_factors": [
-    { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.35 },
-    { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.20 }
+    { "factor": "anomaly_score_mean", "value": 0.72, "weight": 0.35 },
+    { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.20 },
+    { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.15 },
+    { "factor": "adjacent_to_water", "value": true, "weight": 0.15 },
+    { "factor": "past_anomaly_count", "value": 1, "weight": 0.15 }
   ],
   "model_version": "rule_v1", "source": "rule_based" } // "rule_based" | "ml_ranking"
 ```
@@ -345,6 +350,8 @@ risk_score = 100 × clip(
 
 가중치는 초기 가정값 — Backtest B(§10)에서 실제 이상사례 기준으로 보정한다. `contributing_factors`는 Module AGENT가 "왜 1순위인가"를 설명할 때 그대로 인용하는 근거 데이터다(숫자를 만들지 않고 tool output을 읽는 원칙, §0.4).
 
+**구현 상태(2026-08-29)**: `module_risk/run.py` — 위 산출식을 그대로 구현. `features`의 특정 항목이 `null`이면(§ Module AGG의 KECI 내부 데이터 접근 제약 참조) 해당 가중항을 0으로 처리하고 `contributing_factors`에서 빼며, `status:"degraded"`로 표시해 "이 점수는 일부 요인 없이 계산됐다"는 사실을 숨기지 않는다. `risk_tier` 경계값은 70/50/30(§ 위 주석)으로 확정. `pytest module_risk/tests/ -v`에 위 A1037 예시(risk_score=54)를 정확히 재현하는 회귀 테스트가 있다 — 가중치를 바꾸면 이 테스트도 함께 갱신할 것.
+
 ### Module O — 오케스트레이션 (`module_o`)
 
 **역할**: 전체 AOI의 Module RISK 결과를 모아 Top-N 우선순위 큐를 생성하고, 담당자 의사결정을 위한 상태를 관리한다.
@@ -352,7 +359,7 @@ risk_score = 100 × clip(
 ```jsonc
 // output (data)
 { "week_of": "2026-09-01", "priority_queue": [
-    { "rank": 1, "site_id": "A1037", "risk_score": 87, "status": "미점검" }
+    { "rank": 1, "site_id": "A1037", "risk_score": 54, "status": "미점검" }
   ],
   "queue_size": 12, "generated_at": "2026-09-01T09:00:00+09:00" }
 ```
@@ -380,7 +387,7 @@ risk_score = 100 × clip(
 ```jsonc
 // input — Module RISK의 과거 예측과 Module FIELD의 실제 현장결과를 매칭
 { "period": ["2026-09-01", "2026-09-30"],
-  "predictions": [ { "site_id": "A1037", "risk_score": 87, "rank": 1 } ],
+  "predictions": [ { "site_id": "A1037", "risk_score": 54, "rank": 1 } ],
   "field_results": [ { "site_id": "A1037", "actual_anomaly_found": true } ],
   "baselines": ["random", "recency", "ndvi_threshold"] }
 
@@ -410,7 +417,7 @@ Evidence Agent
  └─ Report Generator       (주간 Top-N → 1페이지 요약)
 ```
 
-질문 예: "왜 A1037이 1순위야?" → Agent는 Risk Result Tool의 `contributing_factors`를 그대로 읽어 문장으로 풀어낸다 — **LLM은 숫자를 만들지 않는다.** 예시 응답: "최근 20일 식생지표가 계절평균 대비 크게 감소했고(anomaly_score 0.72), 변화면적이 대상지의 18%이며, 마지막 현장확인은 63일 전입니다. 따라서 위험점수 87점으로 1순위입니다."
+질문 예: "왜 A1037이 이번 주 1위야?" → Agent는 Risk Result Tool의 `contributing_factors`를 그대로 읽어 문장으로 풀어낸다 — **LLM은 숫자를 만들지 않는다.** 예시 응답: "최근 20일 식생지표가 계절평균 대비 크게 감소했고(anomaly_score 0.72), 변화면적이 대상지의 18%이며, 마지막 현장확인은 63일 전입니다. 따라서 위험점수 54점(2순위)으로 이번 주 우선순위 1위입니다." (대기열 순번 "1위"와 위험도 등급 "1순위"는 다른 개념이다 — 최고점 대상지라도 등급은 2순위일 수 있다.)
 
 폴백은 §4.3 참조.
 
@@ -535,7 +542,7 @@ POST /reports/weekly
 | 8/29–8/31 | Scope Lock, 리포 세팅(이 문서) | README/ARCHITECTURE 확정, 공식 붙임1 PDF 재확인 |
 | 8/29 | **Data MVP 완료** — 유방동 82/85필지(96.5%) + 한강유역 전체 5,526/6,275필지(88.1%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson`, `hanriver_maesu_parcels.geojson` |
 | 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
-| 9/11–9/14 | Module AGG + RISK(rule) | 대상지 단위 feature, rule baseline, Top-N |
+| 9/11–9/14 | **Module AGG + RISK(rule) 완료** (2026-08-29 조기 착수) — 유방동 실제 필지 10건으로 end-to-end 파이프라인(OBS→CHG→AGG→RISK) 실증까지 완료 | 대상지 단위 feature, rule baseline, `data/processed/yongin_yubang_priority_queue.geojson` |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
 | 9/19–9/22 | Module O + UI | 지도·Priority Queue·Evidence Card |
 | 9/23–9/25 | Module VERIFY | baseline 비교, Precision@K, Recall@K |
@@ -554,6 +561,8 @@ POST /reports/weekly
 
 이 프로젝트는 Aquaguard처럼 여러 세션이 병렬로 작업하는 구조가 **아니다** — 사용자 1인 + Claude Code 세션이 순차적으로 §12 로드맵을 따라간다. 그래서 `contracts/` 폴더에 별도 JSON Schema 파일을 만들지 않았다 — 이 문서 §5의 예시 JSON이 유일한 소스 오브 트루스다. 새 모듈을 만들 때는 이 문서 §5를 먼저 갱신하고 코드를 짜라.
 
-**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP(PNU→polygon)와 Module OBS/CHG(위성 관측·변화탐지)는 2026-08-29에 조기 완료됐다 — 다음은 **Module AGG + RISK**(§5, pixel/scene → 관리대상지 단위 feature 집계 → rule-based risk_score)다.
+**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP·Module OBS/CHG·Module AGG/RISK는 2026-08-29에 조기 완료됐고, `scripts/run_priority_queue_demo.py`로 유방동 10필지 end-to-end 실증까지 끝났다 — 다음은 **Module O(오케스트레이션) + UI**(§5, Top-N 큐를 웹 지도로 노출)다.
 
-**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). PNU→polygon 복원 스크립트는 `scripts/fetch_parcel_geometry.py`. Module OBS/CHG를 재검증하려면 `python -m pytest module_obs/tests/ module_chg/tests/ -v`(`.env`를 `conftest.py`가 자동 로드하므로 라이브 테스트까지 함께 돈다).
+**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 `python -m pytest module_obs/ module_chg/ module_agg/ module_risk/ -v`(`.env`를 `conftest.py`가 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`.
+
+**알려진 한계(2026-08-29, 아직 안 고친 것)**: `scripts/run_priority_queue_demo.py`가 만드는 `site_attributes`는 전부 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·인접수계여부·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio` 두 요인(가중치 합 0.55)만으로 계산돼 최대치가 구조적으로 낮다 — 유방동 10필지 실증에서 전부 "정상"(risk_score 2~16)로 나온 것은 실제로 이상이 없어서일 수도 있지만, 요인 결측 때문에 점수 자체가 눌려 있을 가능성도 크다. `adjacent_to_water`는 실제로는 GEE의 수체 레이어(JRC Global Surface Water 등)로 계산 가능한 값이니 §12 B급 확장 우선순위로 다음에 붙일 것.

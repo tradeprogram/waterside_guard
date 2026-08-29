@@ -1,0 +1,102 @@
+"""End-to-end 파이프라인 데모 — OBS→CHG→AGG→RISK를 실제 유방동 필지에 돌려
+Priority Queue를 만든다(ARCHITECTURE.md §11.4 "심사위원에게 보여줄 가장
+강력한 한 장"의 첫 실증).
+
+전체 82필지가 아니라 앞쪽 N개만 처리한다 — 필지당 CHG 호출 1회가 OBS 호출
+2회(기준기간·현재기간)를 부르고, 각 OBS 호출이 Earth Engine getInfo 4회를
+쓰므로 필지당 최대 8회 API 왕복이다. 전체 배치 처리는 §12 로드맵 B급
+확장(reduceRegions로 여러 AOI를 한 번에 묶는 성능 개선)에서 다룬다.
+
+사용법:
+    python scripts/run_priority_queue_demo.py --limit 10
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import geopandas as gpd
+from dotenv import load_dotenv
+from shapely.geometry import mapping
+
+from module_agg.run import run as agg_run
+from module_chg.run import run as chg_run
+from module_risk.run import run as risk_run
+
+BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
+CURRENT_PERIOD = ["2026-06-01", "2026-08-25"]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", default="data/processed/yongin_yubang_parcels.geojson")
+    parser.add_argument("--output", default="data/processed/yongin_yubang_priority_queue.geojson")
+    parser.add_argument("--limit", type=int, default=10, help="처리할 필지 수(기본 10)")
+    args = parser.parse_args()
+
+    load_dotenv()
+
+    gdf = gpd.read_file(args.input)  # EPSG:5179 (scripts/fetch_parcel_geometry.py 저장 규약)
+    subset = gdf.head(args.limit)
+
+    rows = []
+    for i, row in enumerate(subset.itertuples(), start=1):
+        site_id = f"YUBANG_{row.pnu}"
+        geometry_5179 = mapping(row.geometry)
+
+        print(f"[{i}/{len(subset)}] {site_id} 처리 중...")
+
+        chg_result = chg_run(
+            {
+                "aoi_id": site_id,
+                "site_geometry_5179": geometry_5179,
+                "baseline_period": BASELINE_PERIOD,
+                "current_period": CURRENT_PERIOD,
+            }
+        )
+
+        agg_result = agg_run(
+            {
+                "site_id": site_id,
+                "pnu": row.pnu,
+                "chg_results": [chg_result["data"]],
+                # site_attributes: KECI 내부 자산 DB 접근 불가(§ Module AGG 구현 상태 참조) — 전부 None
+                "site_attributes": {},
+            }
+        )
+
+        risk_result = risk_run({"site_id": site_id, "features": agg_result["data"]["features"]})
+
+        rows.append(
+            {
+                "site_id": site_id,
+                "pnu": row.pnu,
+                "jibun": row.jibun,
+                "addr": row.addr,
+                "risk_score": risk_result["data"]["risk_score"],
+                "risk_tier": risk_result["data"]["risk_tier"],
+                "anomaly_score": chg_result["data"].get("anomaly_score"),
+                "change_type_hint": chg_result["data"].get("change_type_hint"),
+                "chg_status": chg_result["status"],
+                "geometry": row.geometry,
+            }
+        )
+
+    result_gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:5179")
+    result_gdf = result_gdf.sort_values("risk_score", ascending=False).reset_index(drop=True)
+    result_gdf.insert(0, "rank", range(1, len(result_gdf) + 1))
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    result_gdf.to_file(out_path, driver="GeoJSON", encoding="utf-8")
+
+    summary_path = out_path.with_suffix(".json")
+    summary = result_gdf.drop(columns="geometry").to_dict(orient="records")
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"\n완료: {len(result_gdf)}건 -> {out_path}, {summary_path}")
+
+
+if __name__ == "__main__":
+    main()
