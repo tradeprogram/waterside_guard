@@ -7,3 +7,4 @@ PublicDataReader
 fastapi
 uvicorn
 python-dotenv
+matplotlib  # 시각 검증용 (data/processed 미리보기)

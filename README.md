@@ -170,10 +170,10 @@ sequenceDiagram
 
 | 데이터 | 내용 | 상태 |
 |---|---|---|
-| `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체 6,275행 (PNU/소재지/기준일, **좌표 없음**) | 로컬 확보됨 — `data/raw/`에 배치 필요 |
-| `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링 85행 — 삼성전자·한강유역환경청 협력 복원사업(약 33만㎡) 부지, 실증 앵커 | 로컬 확보됨 — `data/raw/`에 배치 필요 |
-| V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | API 키 보유, 파이프라인 미구현 (Milestone 1) |
-| Sentinel-2 / Sentinel-1 | 광학/SAR 위성 시계열 | Sentinel Hub API 키 보유, 미구현 |
+| `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체 6,275행 (PNU/소재지/기준일, **좌표 없음**) | `data/raw/`에 배치 완료 |
+| `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링 85행 — 삼성전자·한강유역환경청 협력 복원사업(약 33만㎡) 부지, 실증 앵커 | `data/raw/`에 배치 완료 |
+| V-World 연속지적도 (`LP_PA_CBND_BUBUN`) | PNU → 필지 폴리곤 복원 | **82/85필지(96.5%) 복원·검증 완료** — `scripts/fetch_parcel_geometry.py`, 6,275건 확장은 진행 중 |
+| Sentinel-2 / Sentinel-1 | 광학/SAR 위성 시계열 | Sentinel Hub API 키 미확보, 미구현 |
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
@@ -198,7 +198,8 @@ scripts/                      # 파이프라인 스크립트 (Milestone별)
 
 | 기간 | 목표 |
 |---|---|
-| 9/1–9/5 | **Data MVP** — PNU 코드로 필지 폴리곤 복원 (유방동 85필지 → 6,275건 확장) |
+| 8/29 | **Data MVP 1단계 완료** — 유방동 82/85필지 폴리곤 복원·검증 |
+| 9/1–9/5 | Data MVP 2단계 — 6,275건 전체 확장 |
 | 9/6–9/14 | 변화탐지(Change Engine) + GIS 위험도 Risk Engine(규칙기반) |
 | 9/15–9/22 | 지도 대시보드 + Priority Queue UI |
 | 9/23–9/27 | Backtest(baseline 대비 성능) + Evidence Agent |

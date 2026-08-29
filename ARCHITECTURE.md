@@ -154,7 +154,7 @@ Module AGENT는 별도 상태가 아니라 O/FIELD/VERIFY 위에 얹히는 설�
 | `hanriver_maesu_raw.csv` | 한강유역환경청 매수토지 전체, **6,275행** | data.go.kr 원본. 컬럼: `토지고유코드`(PNU 19자리)/`소재지`/`데이터기준일`. **좌표 없음** — §3.2 참조 |
 | `yongin_yubang_maesu.csv` | 용인시 처인구 유방동 필터링, **85행** | 삼성전자·한강유역환경청 협력 묵논습지·수변녹지 복원사업(약 33만㎡) 부지와 일치하는 법정동. 데모 앵커 겸 다건 랭킹 검증용 후보군 |
 
-배치: `data/raw/hanriver_maesu_raw.csv`, `data/raw/yongin_yubang_maesu.csv`(원본 보존). 가공 결과는 `data/processed/`로 분리. **이 두 파일은 아직 리포에 없음 — Milestone 1 착수 전 사용자가 직접 배치할 것** (§12 로드맵 참조).
+배치: `data/raw/hanriver_maesu_raw.csv`, `data/raw/yongin_yubang_maesu.csv`(원본 보존, 2026-08-29 배치 완료). 가공 결과는 `data/processed/`로 분리.
 
 ### 3.2 필지 폴리곤 복원 (Milestone 1 핵심)
 
@@ -172,6 +172,8 @@ geo = api.get_data("연속지적도", attrFilter="pnu:like:4146110500100780003")
 raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라이브러리로 85건(유방동)부터 조인 테스트 → 성공하면 6,275건 전체로 확장. **완료 기준**: 유방동 85필지의 polygon GeoJSON을 확보하고 실제 위치(용인시 처인구)와 대략 일치하는지 시각 검증.
 
 **막히면**: V-World 개발자 문서(vworld.kr/dev)는 봇 접근을 막아둬서 자동 크롤링이 안 된다 — 사용자가 브라우저로 직접 확인하거나 `PublicDataReader`의 `VworldData` 클래스 소스코드를 직접 읽는 게 빠르다.
+
+**진행 상태(2026-08-29)**: `scripts/fetch_parcel_geometry.py`로 유방동 85필지 중 **82필지(96.5%) 복원 성공**. 미확인 3필지(149-4/149-1/147-1)는 연속지적도에 없는 코드 — 필지 합병·분할로 PNU가 갱신됐을 가능성(§12 TODO). 복원 결과의 중심좌표는 (127.2095E, 37.2622N)로 용인시 처인구 유방동 실제 위치와 일치 확인(`data/processed/yongin_yubang_parcels.geojson`, 내부 EPSG:5179 저장). `PublicDataReader.VworldData.get_data()`의 `attrFilter="pnu:like:{PNU}"` 문법이 그대로 동작함을 확인 — 라이브러리를 감싸지 않고 동일한 요청 패턴을 직접 구현했다(응답 페이지네이션·재시도 제어를 위해). 다음 단계는 6,275건 전체 확장 — PNU당 개별 API 호출이라 요청 간격(`REQUEST_INTERVAL_SEC=0.2`) 기준 약 20분 소요 예상, V-World 일일 호출한도 확인 필요.
 
 ### 3.3 정적 레이어
 
@@ -519,7 +521,8 @@ POST /reports/weekly
 | 기간 | 목표 | 산출물 |
 |---|---|---|
 | 8/29–8/31 | Scope Lock, 리포 세팅(이 문서) | README/ARCHITECTURE 확정, 공식 붙임1 PDF 재확인 |
-| 9/1–9/5 | **Data MVP**(§3.2) | 유방동 85필지 polygon GeoJSON 확보·시각 검증 → 6,275건 확장 |
+| 8/29 | **Data MVP 1단계 완료** — 유방동 85필지 중 82필지(96.5%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson` |
+| 9/1–9/5 | **Data MVP 2단계**(§3.2) | 6,275건 전체 확장, 미확인 3필지 원인 확인 |
 | 9/6–9/10 | Module OBS + CHG | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
 | 9/11–9/14 | Module AGG + RISK(rule) | 대상지 단위 feature, rule baseline, Top-N |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
@@ -540,6 +543,6 @@ POST /reports/weekly
 
 이 프로젝트는 Aquaguard처럼 여러 세션이 병렬로 작업하는 구조가 **아니다** — 사용자 1인 + Claude Code 세션이 순차적으로 §12 로드맵을 따라간다. 그래서 `contracts/` 폴더에 별도 JSON Schema 파일을 만들지 않았다 — 이 문서 §5의 예시 JSON이 유일한 소스 오브 트루스다. 새 모듈을 만들 때는 이 문서 §5를 먼저 갱신하고 코드를 짜라.
 
-**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. 오늘이 8/29~8/31이면 다음 할 일은 Milestone 1(§3.2, PNU→polygon 복원)이다.
+**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP 1단계(유방동 82/85필지 복원)는 완료됐다 — 다음은 6,275건 전체 확장이거나(§3.2), 이미 됐다면 Module OBS/CHG(§5) 착수다.
 
-**막히면**: `data/raw/`에 CSV가 없으면 사용자에게 배치를 요청하라(§3.1) — 이 파일들은 리포 생성 시점에 로컬에서 못 찾았다. V-World API 키가 `.env`에 없으면 사용자가 이미 보유하고 있다고 브리핑에 명시돼 있으니 요청하라(`.env.example` 참조).
+**막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`는 이미 배치돼 있다(2026-08-29). PNU→polygon 복원 스크립트는 `scripts/fetch_parcel_geometry.py` — 재실행하려면 `python scripts/fetch_parcel_geometry.py --input data/raw/<csv> --output data/processed/<geojson>`.
