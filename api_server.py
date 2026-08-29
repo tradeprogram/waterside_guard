@@ -15,6 +15,10 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv()  # GEMINI_API_KEY 등 — 다른 모듈을 import하기 전에 먼저 로드해야 한다
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
