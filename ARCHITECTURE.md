@@ -489,6 +489,8 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 **Before/After 완료(2026-08-29, 사용자 지적 반영)**: "왜 위성지도인가"라는 질문에 답하기 위해 `module_obs/thumbnail.py`(Earth Engine `getThumbURL()`)로 실제 NDVI 컬러 이미지를 만들어 (1) Evidence Card에 기준기간·현재기간 나란히, (2) 선택된 대상지 위치에 지도 위 실제 좌표로 겹쳐서 보여준다(`components/NdviThumbnails.tsx`, `MapView.tsx`의 `ndvi-overlay` image source). 60개 전부를 미리 만들지 않고 선택한 site 1건만 그때 생성한다(§7 `GET /sites/{id}/thumbnails`, on-demand) — 배치 조회(§12 B급)의 이점을 스스로 깎아먹지 않기 위해서다. 실제 확인: 여주시 대신면 양촌리 369-5 필지에서 2024-06-10/2026-06-15 두 장의 실제 위성 이미지(각 6.4KB PNG)를 받아 브라우저에서 렌더링 확인.
 
+**버그 발견·수정(2026-08-29)**: 사용자가 "왼쪽 리스트에서 클릭하면 지도가 그 위치로 이동해야 한다"고 요청해서 재현했더니, 실제로 **지도가 전혀 움직이지 않는 버그**가 있었다. 원인: `MapView.tsx`의 두 effect가 전부 `if (map.isStyleLoaded()) X(); else map.once("load", X);` 패턴을 썼는데, 이 샌드박스 환경에서는 래스터 베이스맵 타일이 끝까지 로드되지 않아 `isStyleLoaded()`가 계속 `false`를 반환했다. 그러면 매번 `map.once("load", ...)`로 다시 구독하는데, `"load"`는 1회성 이벤트라 맵 생성 시 이미 한 번 발생한 뒤로는 다시 오지 않는다 — 그래서 대상지를 선택해도 콜백이 영원히 실행 안 됐다. **수정**: `isStyleLoaded()` 대신 `map.getSource("sites")`/`map.getSource("ndvi-overlay")`가 이미 존재하는지(= `"load"` 핸들러가 이미 실행됐는지)로 판단하도록 바꿨다 — 존재하면 즉시 실행, 없으면만 `"load"`를 기다린다. `window.__debugMap` 임시 훅으로 `map.getCenter()`/`getZoom()`/소스 좌표를 직접 찍어 수정 전후를 실측 비교해 확인했다(수정 전: 클릭해도 카메라 고정, overlay 좌표가 placeholder인 채 그대로. 수정 후: 여러 site를 연속 선택해도 매번 정확한 필지 위치로 확대되고 NDVI 오버레이 좌표가 실제 bbox로 갱신됨). 이 버그는 처음 커밋했을 때부터 있었다 — 그 세션에서는 데이터 흐름(네트워크 요청 성공, 이미지 렌더링)만 확인하고 지도 카메라의 실제 이동은 확인하지 않아서 놓쳤다.
+
 ---
 
 ## 9. 불확실성 표기 원칙 (전 모듈 공통)

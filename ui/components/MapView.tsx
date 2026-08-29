@@ -162,7 +162,11 @@ export default function MapView({
       }
     };
 
-    if (map.isStyleLoaded()) render();
+    // map.isStyleLoaded()는 이 환경에서 타일 로딩이 끝나기 전까지 계속 false를 반환할 수 있어
+    // 신뢰할 수 없다 — "sites" 소스가 이미 있는지(=map.on("load",...) 핸들러가 이미 실행됐는지)로
+    // 판단한다. 이미 실행됐다면 "load" 이벤트는 1회성이라 다시 구독해도 절대 안 온다(실측으로 확인한
+    // 버그, 2026-08-29 — 대상지 선택 시 지도가 안 움직이던 원인).
+    if (map.getSource("sites")) render();
     else map.once("load", render);
   }, [sites, selectedSiteId]);
 
@@ -198,7 +202,7 @@ export default function MapView({
         });
     };
 
-    if (map.isStyleLoaded()) apply();
+    if (map.getSource("ndvi-overlay")) apply();
     else map.once("load", apply);
 
     return () => {
