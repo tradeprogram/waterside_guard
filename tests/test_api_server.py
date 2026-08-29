@@ -126,6 +126,29 @@ def test_backtest_after_inspection_scores_it():
     assert body["data"]["precision_at_k"]["value"] == 1.0
 
 
+def test_ask_site_404_for_unknown_site():
+    r = client.post("/sites/NOPE/ask", json={"question": "왜?"})
+    assert r.status_code == 404
+
+
+def test_ask_site_falls_back_to_template_without_gemini_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    r = client.post("/sites/A1037/ask", json={"question": "왜 1위야?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "degraded"
+    assert "54" in body["data"]["answer"]
+
+
+def test_weekly_report_falls_back_to_template_without_gemini_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    r = client.post("/reports/weekly", json={"week_of": "2026-09-01"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "degraded"
+    assert "전체 대상지" in body["data"]["report_text"]
+
+
 def test_create_inspection_invalid_category_rejected():
     payload = {
         "site_id": "A1037",

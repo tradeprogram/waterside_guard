@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchEvidence, fetchTimeseries, type Site, type Scene } from "@/lib/api";
 import TimeSeriesChart from "./TimeSeriesChart";
 import InspectionForm from "./InspectionForm";
+import AskAgent from "./AskAgent";
 
 const FACTOR_LABEL: Record<string, string> = {
   anomaly_score_mean: "위성 이상도(계절 대비 변화)",
@@ -68,6 +69,8 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
           <p className="text-sm text-neutral-400">불러오는 중...</p>
         )}
       </div>
+
+      <AskAgent siteId={site.site_id} />
 
       <InspectionForm siteId={site.site_id} onSubmitted={onInspectionSubmitted} />
 

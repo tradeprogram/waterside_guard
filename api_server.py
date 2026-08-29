@@ -5,8 +5,9 @@
 실증 결과)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth
 Engine을 다시 부르지 않는다(배치 계산 → 빠른 조회 API라는 §2.2 원칙).
 
-`POST /reports/weekly`는 아직 없다 — Module AGENT가 구현되지 않았다(§12
-로드맵). 없는 기능을 있는 척 노출하지 않는다.
+`POST /sites/{site_id}/ask`, `POST /reports/weekly`는 §7 원안에 없던
+Module AGENT 연동 엔드포인트다 — §5 Module AGENT의 Q&A 계약을 실제로 쓰려면
+필요해서 추가했다(§12 로드맵 참조).
 """
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from common.geo import geometry_5179_to_4326
+from module_agent.report import generate as agent_generate_report
+from module_agent.run import run as agent_run
 from module_field.run import run as field_run
 from module_o.run import run as o_run
 from module_o.store import store
@@ -197,3 +200,23 @@ def create_inspection(payload: InspectionRequest) -> dict:
         raise HTTPException(400, result["warnings"])
     store.record_inspection(payload.site_id, payload.model_dump())
     return result
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+@app.post("/sites/{site_id}/ask")
+def ask_site(site_id: str, payload: AskRequest) -> dict:
+    if store.get(site_id) is None:
+        raise HTTPException(404, f"site '{site_id}' not found")
+    return agent_run({"site_id": site_id, "question": payload.question})
+
+
+class WeeklyReportRequest(BaseModel):
+    week_of: str
+
+
+@app.post("/reports/weekly")
+def create_weekly_report(payload: WeeklyReportRequest) -> dict:
+    return agent_generate_report({"week_of": payload.week_of})

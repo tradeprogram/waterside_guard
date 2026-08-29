@@ -196,6 +196,7 @@ module_risk/                  # Module RISK — 규칙기반 risk_score 산정
 module_o/                     # Module O — 우선순위 큐 + 상태머신(store.py)
 module_field/                 # Module FIELD — 현장점검 입력 검증
 module_verify/                 # Module VERIFY — Precision@K·Recall@K·baseline 비교
+module_agent/                  # Module AGENT — Gemini Q&A + 주간보고서
   tests/                        # pytest, 모듈별 독립 실행 가능
 api_server.py                  # FastAPI — /sites, /priority-queue, /inspections 등
 tests/                          # api_server.py 통합 테스트
@@ -229,7 +230,7 @@ cd ui && npm install && npm run dev
 | 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
 | 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
 | 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
-| 9/23–9/27 | **Module VERIFY 완료** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest` 연결. Evidence Agent는 진행 예정 |
+| 9/23–9/27 | **Module VERIFY·AGENT 전부 완료** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. Gemini 기반 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`), `GEMINI_API_KEY` 확보 후 실제 응답 검증 대기 |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 
 전체 로드맵과 각 마일스톤의 완료 기준은 [ARCHITECTURE.md §12](ARCHITECTURE.md#12-개발-로드맵).

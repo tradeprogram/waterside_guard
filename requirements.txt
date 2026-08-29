@@ -9,5 +9,6 @@ uvicorn
 python-dotenv
 matplotlib  # 시각 검증용 (data/processed 미리보기)
 earthengine-api  # Module OBS — Google Earth Engine (COPERNICUS/S2_SR_HARMONIZED)
+google-genai  # Module AGENT — Gemini function calling
 pytest
 httpx  # FastAPI TestClient용

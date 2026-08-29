@@ -95,3 +95,14 @@ export async function postInspection(payload: {
   if (!res.ok) throw new Error(JSON.stringify(body));
   return body as Envelope<{ site_id: string; inspection_id: string; status: string }>;
 }
+
+export async function askSite(siteId: string, question: string) {
+  const res = await fetch(`${API_BASE}/sites/${encodeURIComponent(siteId)}/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(body));
+  return body as Envelope<{ site_id: string; question: string; answer: string; tools_used: string[] }>;
+}
