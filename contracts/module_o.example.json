@@ -1,0 +1,13 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "week_of": "2026-09-01",
+    "priority_queue": [
+      { "rank": 1, "site_id": "A1037", "risk_score": 87, "status": "미점검" }
+    ],
+    "queue_size": 12,
+    "generated_at": "2026-09-01T09:00:00+09:00"
+  },
+  "warnings": []
+}

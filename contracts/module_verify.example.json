@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "period": ["2026-09-01", "2026-09-30"],
+    "precision_at_k": { "k": 10, "value": 0.7 },
+    "recall_at_top20pct": 0.65,
+    "baseline_comparison": [
+      { "baseline": "random", "precision_at_k": 0.2 },
+      { "baseline": "recency", "precision_at_k": 0.4 },
+      { "baseline": "ndvi_threshold", "precision_at_k": 0.5 },
+      { "baseline": "proposed", "precision_at_k": 0.7 }
+    ]
+  },
+  "warnings": []
+}

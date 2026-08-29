@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "site_id": "A1037",
+    "question": "왜 A1037이 1순위야?",
+    "answer": "최근 20일 식생지표가 계절평균 대비 크게 감소했고(anomaly_score 0.72), 변화면적이 대상지의 18%이며, 마지막 현장확인은 63일 전입니다. 따라서 위험점수 87점으로 1순위입니다.",
+    "tools_used": ["risk_result_tool", "time_series_query_tool"]
+  },
+  "warnings": []
+}

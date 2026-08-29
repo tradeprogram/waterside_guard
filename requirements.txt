@@ -1,0 +1,9 @@
+geopandas
+pandas
+shapely
+pyproj
+requests
+PublicDataReader
+fastapi
+uvicorn
+python-dotenv

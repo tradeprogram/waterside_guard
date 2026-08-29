@@ -1,0 +1,14 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "aoi_id": "YONGIN_YUBANG",
+    "site_geometry_5179": { "type": "Polygon", "coordinates": [] },
+    "anomaly_score": 0.72,
+    "changed_area_ratio": 0.18,
+    "change_type_hint": "vegetation_decline",
+    "source": "observed",
+    "confidence_interval": [0.61, 0.83]
+  },
+  "warnings": []
+}

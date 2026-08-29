@@ -1,0 +1,16 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "site_id": "A1037",
+    "risk_score": 87,
+    "risk_tier": "1순위",
+    "contributing_factors": [
+      { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.35 },
+      { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.20 }
+    ],
+    "model_version": "rule_v1",
+    "source": "rule_based"
+  },
+  "warnings": []
+}

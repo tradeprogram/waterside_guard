@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "fallback_tier": 1,
+  "data": {
+    "aoi_id": "YONGIN_YUBANG",
+    "scenes": [
+      {
+        "source": "sentinel2",
+        "acquisition_date": "2026-08-20",
+        "cloud_cover_pct": 8.2,
+        "indices": { "ndvi_mean": 0.61, "ndmi_mean": 0.34 }
+      }
+    ],
+    "composite_ref": "s3://.../yongin_yubang_2026-08.tif"
+  },
+  "warnings": []
+}
