@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { fetchEvidence, fetchTimeseries, type Site, type Scene } from "@/lib/api";
 import TimeSeriesChart from "./TimeSeriesChart";
 import InspectionForm from "./InspectionForm";
-import AskAgent from "./AskAgent";
 import NdviThumbnails from "./NdviThumbnails";
 
 const FACTOR_LABEL: Record<string, string> = {
-  anomaly_score_mean: "위성 이상도(계절 대비 변화)",
+  anomaly_score_mean: "위성 이상도(계절 대비 변화, NDVI/NDMI)",
   changed_area_ratio: "변화 면적 비율",
+  sar_anomaly_mean: "레이더(SAR) 변화 — 구름과 무관한 보조 근거",
+  recent_rainfall_mm: "최근 14일 누적 강우량",
   last_inspection_days_ago: "마지막 점검 후 경과일",
   adjacent_to_water: "수변 인접 여부",
   past_anomaly_count: "과거 이상 발생 횟수",
@@ -72,8 +73,6 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
           <p className="text-sm text-neutral-400">불러오는 중...</p>
         )}
       </div>
-
-      <AskAgent siteId={site.site_id} />
 
       <InspectionForm siteId={site.site_id} onSubmitted={onInspectionSubmitted} />
 

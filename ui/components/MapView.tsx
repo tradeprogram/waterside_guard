@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LngLatBounds, Map as MapLibreMap, type GeoJSONSource, type ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { fetchThumbnails, type Site } from "@/lib/api";
@@ -14,6 +14,34 @@ function collectLngLat(coords: unknown, out: [number, number][]) {
     return;
   }
   for (const c of coords) collectLngLat(c, out);
+}
+
+// 대상지 폴리곤(수백 m²)의 정확한 중심은 아니지만, 마커를 찍을 위치로는 충분한
+// 근사치(꼭짓점 평균) — turf 등 외부 라이브러리 없이 계산한다.
+function approxCentroid(geometry: GeoJSON.Geometry): [number, number] | null {
+  const points: [number, number][] = [];
+  if ("coordinates" in geometry) collectLngLat(geometry.coordinates, points);
+  if (points.length === 0) return null;
+  const [sumLon, sumLat] = points.reduce(([sLon, sLat], [lon, lat]) => [sLon + lon, sLat + lat], [0, 0]);
+  return [sumLon / points.length, sumLat / points.length];
+}
+
+// map.once("load", cb") 패턴은 이 프로젝트 환경에서 신뢰할 수 없다고 실측으로 여러 번
+// 확인됐다(2026-08-29·30 — "load"가 아예 안 오거나, 이미 소비된 뒤라 다시 안 옴). 대신
+// 소스가 실제로 존재하는지를 200ms 간격으로 폴링한다 — 이미 있으면 즉시, 없으면 생길 때까지
+// 기다린다. cleanup에서 반드시 취소해야 언마운트/의존성 변경 후에도 안 불린다.
+function waitForSource(map: MapLibreMap, sourceId: string, callback: () => void): () => void {
+  if (map.getSource(sourceId)) {
+    callback();
+    return () => {};
+  }
+  const intervalId = setInterval(() => {
+    if (map.getSource(sourceId)) {
+      clearInterval(intervalId);
+      callback();
+    }
+  }, 200);
+  return () => clearInterval(intervalId);
 }
 
 // risk_tier(§ARCHITECTURE.md Module RISK) 색상 — 등급 4단계
@@ -37,6 +65,11 @@ export default function MapView({
   const mapRef = useRef<MapLibreMap | null>(null);
   const onSelectSiteRef = useRef(onSelectSite);
   const hasFitBoundsRef = useRef(false);
+  // Earth Engine 썸네일 fetch가 끝난 site_id — selectedSiteId와 다르면 "아직 로딩 중"으로
+  // 파생시킨다. 실제 setState는 아래 effect의 .then/.catch(비동기) 안에서만 호출하므로
+  // set-state-in-effect 린트에 안 걸린다.
+  const [overlayReadySiteId, setOverlayReadySiteId] = useState<string | null>(null);
+  const overlayLoading = selectedSiteId !== null && overlayReadySiteId !== selectedSiteId;
 
   // ref는 렌더 중이 아니라 커밋 후(effect)에 갱신한다 — MapLibre의 클릭 콜백은 한 번만 등록되므로
   // 매번 최신 onSelectSite를 읽으려면 ref를 거쳐야 한다.
@@ -59,6 +92,11 @@ export default function MapView({
               "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
             ],
             tileSize: 256,
+            // Esri World Imagery는 도심 밖 지역(용인/여주/가평 등)에서 zoom 19+에 실제
+            // 이미지 없이 "Map data not yet available" placeholder 타일을 반환한다(실측 확인,
+            // 2026-08-29). maxzoom을 18로 캡해서 그 이상은 z18 타일을 확대(overzoom)해
+            // 쓰게 하면 placeholder가 아예 안 나온다.
+            maxzoom: 18,
             attribution: "Esri World Imagery",
           },
         },
@@ -69,52 +107,101 @@ export default function MapView({
       zoom: 10,
     });
     mapRef.current = map;
+    map.on("error", (e) => console.error("MapLibre error:", e.error));
 
-    map.on("load", () => {
-      map.addSource("sites", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({
-        id: "sites-fill",
-        type: "fill",
-        source: "sites",
-        paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": ["case", ["get", "selected"], 0.85, 0.55],
-        },
-      });
-      map.addLayer({
-        id: "sites-outline",
-        type: "line",
-        source: "sites",
-        paint: {
-          "line-color": "#1a1a1a",
-          "line-width": ["case", ["get", "selected"], 3, 1],
-        },
-      });
+    // "load" 하나에만 의존하지 않고 "idle"·"styledata"·폴링까지 걸어서 무엇이든 먼저
+    // 되는 조건으로 설정을 진행한다(2026-08-30, 사용자 환경에서 "load"가 안 오는 사례
+    // 실측 확인). 그 이벤트들이 실제로 스타일 준비 전에 먼저 오는 경우도 있어서(그 상태로
+    // addSource를 부르면 "Style is not done loading"을 던짐) isStyleLoaded()로 한 번 더
+    // 확인하고, 실패하면 setupDone을 다시 false로 둬 다음 이벤트가 재시도하게 한다.
+    let setupDone = false;
+    const setupLayers = () => {
+      if (setupDone) return;
+      if (!map.isStyleLoaded()) return; // 아직 준비 안 됐으면 이번 이벤트는 건너뛰고 다음 이벤트를 기다린다
+      try {
+        map.addSource("sites", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "sites-fill",
+          type: "fill",
+          source: "sites",
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": ["case", ["get", "selected"], 0.85, 0.55],
+          },
+        });
+        map.addLayer({
+          id: "sites-outline",
+          type: "line",
+          source: "sites",
+          paint: {
+            "line-color": "#1a1a1a",
+            "line-width": ["case", ["get", "selected"], 3, 1],
+          },
+        });
 
-      map.on("click", "sites-fill", (e) => {
-        const siteId = e.features?.[0]?.properties?.site_id;
-        if (siteId) onSelectSiteRef.current(siteId);
-      });
-      map.on("mouseenter", "sites-fill", () => (map.getCanvas().style.cursor = "pointer"));
-      map.on("mouseleave", "sites-fill", () => (map.getCanvas().style.cursor = ""));
+        // 대상지 폴리곤 자체가 수백 m²라, 한강유역 6개 시/군/구를 한 화면에 담는
+        // 줌에서는 진짜 모양(위 sites-fill)이 화면에 몇 픽셀도 안 나온다 — 그래서
+        // 줌과 무관하게 항상 일정 크기로 보이는 점 마커를 centroid 위치에 별도로
+        // 얹는다(2026-08-30, "필지가 안 보인다" 사용자 지적 반영). 폴리곤 소스에
+        // circle 레이어를 그대로 못 얹는 이유: circle은 Point/MultiPoint 지오메트리만
+        // 그리고 Polygon 피처는 조용히 무시하므로, Point 전용 소스를 따로 둬야 한다.
+        map.addSource("sites-points", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "sites-markers",
+          type: "circle",
+          source: "sites-points",
+          paint: {
+            "circle-radius": ["case", ["get", "selected"], 10, 6],
+            "circle-color": ["get", "color"],
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
 
-      // 선택된 대상지의 실제 NDVI 위성 이미지를 지도 위에 얹는 레이어 — 처음엔 소스가
-      // 없어야 하므로 화면 밖 아주 작은 좌표로 자리만 잡아둔다(빈 image source는 허용 안 됨).
-      map.addSource("ndvi-overlay", {
-        type: "image",
-        url:
-          "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7",
-        coordinates: [
-          [0, 0.0001],
-          [0.0001, 0.0001],
-          [0.0001, 0],
-          [0, 0],
-        ],
-      });
-      map.addLayer({ id: "ndvi-overlay-layer", type: "raster", source: "ndvi-overlay", paint: { "raster-opacity": 0.85 } });
-    });
+        for (const layerId of ["sites-fill", "sites-markers"]) {
+          map.on("click", layerId, (e) => {
+            const siteId = e.features?.[0]?.properties?.site_id;
+            if (siteId) onSelectSiteRef.current(siteId);
+          });
+          map.on("mouseenter", layerId, () => (map.getCanvas().style.cursor = "pointer"));
+          map.on("mouseleave", layerId, () => (map.getCanvas().style.cursor = ""));
+        }
+
+        // 선택된 대상지의 실제 NDVI 위성 이미지를 지도 위에 얹는 레이어 — 처음엔 소스가
+        // 없어야 하므로 화면 밖 아주 작은 좌표로 자리만 잡아둔다(빈 image source는 허용 안 됨).
+        map.addSource("ndvi-overlay", {
+          type: "image",
+          url:
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7",
+          coordinates: [
+            [0, 0.0001],
+            [0.0001, 0.0001],
+            [0.0001, 0],
+            [0, 0],
+          ],
+        });
+        map.addLayer({ id: "ndvi-overlay-layer", type: "raster", source: "ndvi-overlay", paint: { "raster-opacity": 0.85 } });
+        setupDone = true;
+      } catch (e) {
+        console.error("setupLayers 실패, 다음 이벤트에서 재시도:", e);
+      }
+    };
+
+    map.on("load", setupLayers);
+    map.on("idle", setupLayers);
+    map.on("styledata", setupLayers);
+    // 위 이벤트들도 전혀 안 왔을 극단적 경우를 대비한 최후 수단 — 1초 간격으로 폴링해서
+    // 스타일이 준비되는 즉시 잡아낸다(setupDone 확인되면 스스로 멈춘다).
+    const pollId = setInterval(() => {
+      if (setupDone) {
+        clearInterval(pollId);
+        return;
+      }
+      setupLayers();
+    }, 1000);
 
     return () => {
+      clearInterval(pollId);
       map.remove();
       mapRef.current = null;
     };
@@ -127,7 +214,8 @@ export default function MapView({
 
     const render = () => {
       const source = map.getSource("sites") as GeoJSONSource | undefined;
-      if (!source) return;
+      const pointSource = map.getSource("sites-points") as GeoJSONSource | undefined;
+      if (!source || !pointSource) return;
 
       const features = sites
         .filter((s) => s.geometry_geojson)
@@ -142,6 +230,16 @@ export default function MapView({
           },
         }));
       source.setData({ type: "FeatureCollection", features });
+
+      const pointFeatures = features
+        .map((f) => {
+          const centroid = approxCentroid(f.geometry);
+          return centroid
+            ? { type: "Feature" as const, geometry: { type: "Point" as const, coordinates: centroid }, properties: f.properties }
+            : null;
+        })
+        .filter((f): f is NonNullable<typeof f> => f !== null);
+      pointSource.setData({ type: "FeatureCollection", features: pointFeatures });
 
       // 대상지가 처음 로드된 시점에 한 번만 전체 범위로 맞춘다 — 유방동(단일 동)만이
       // 아니라 한강유역 여러 시/군/구에 흩어진 대상지를 한 화면에서 볼 수 있어야 한다.
@@ -162,12 +260,7 @@ export default function MapView({
       }
     };
 
-    // map.isStyleLoaded()는 이 환경에서 타일 로딩이 끝나기 전까지 계속 false를 반환할 수 있어
-    // 신뢰할 수 없다 — "sites" 소스가 이미 있는지(=map.on("load",...) 핸들러가 이미 실행됐는지)로
-    // 판단한다. 이미 실행됐다면 "load" 이벤트는 1회성이라 다시 구독해도 절대 안 온다(실측으로 확인한
-    // 버그, 2026-08-29 — 대상지 선택 시 지도가 안 움직이던 원인).
-    if (map.getSource("sites")) render();
-    else map.once("load", render);
+    return waitForSource(map, "sites", render);
   }, [sites, selectedSiteId]);
 
   // 대상지를 선택하면: (1) 실제 NDVI 위성 이미지를 그 위치에 얹고 (2) 알아볼 수 있게 확대한다.
@@ -194,21 +287,35 @@ export default function MapView({
 
       fetchThumbnails(selectedSiteId)
         .then((res) => {
-          if (cancelled || !res.current) return;
-          source.updateImage({ url: res.current.url, coordinates: res.current.image_coordinates });
+          if (cancelled) return;
+          if (res.current) {
+            source.updateImage({ url: res.current.url, coordinates: res.current.image_coordinates });
+          }
+          setOverlayReadySiteId(selectedSiteId);
         })
         .catch(() => {
           /* 지도 오버레이는 부가 기능 — 실패해도 나머지 화면에 영향 없음 */
+          if (!cancelled) setOverlayReadySiteId(selectedSiteId);
         });
     };
 
-    if (map.getSource("ndvi-overlay")) apply();
-    else map.once("load", apply);
+    const cancelWait = waitForSource(map, "ndvi-overlay", apply);
 
     return () => {
       cancelled = true;
+      cancelWait();
     };
   }, [selectedSiteId, sites]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      {overlayLoading && (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-neutral-900/85 px-3 py-1.5 text-xs text-white shadow">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          위성 이미지 불러오는 중...
+        </div>
+      )}
+    </div>
+  );
 }

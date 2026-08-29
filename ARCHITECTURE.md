@@ -274,7 +274,7 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 
 **폴백**: 구름 20% 이상인 장면은 자동 제외 후 최근 유효 장면으로 대체, `warnings`에 대체 사유 기록.
 
-**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. 현재 구현은 Sentinel-2만 지원한다(입력에 `sources` 필드는 없음 — 애초에 다중소스 스위칭을 만들지 않았다, Sentinel-1은 §3.4에 적어둔 것처럼 향후 확장). `composite_ref`는 여전히 항상 `null`이다 — 대신 같은 목적(지도에 실제 위성영상을 얹는 것)을 별도 모듈 `module_obs/thumbnail.py`가 담당하게 됐다(§8 Before/After 구현 상태 참조). `composite_ref` 필드 자체를 채우는 대신 완전히 분리된 이유: Module OBS의 `run()`(시계열 통계 조회)과 썸네일 생성은 호출 빈도·비용 특성이 달라서(전자는 배치, 후자는 site 1건씩 on-demand) 같은 함수에 얹으면 배치 조회 성능(§12 B급)이 오염된다.
+**구현 상태(2026-08-29, 실증 완료)**: `module_obs/run.py` — 원래 Sentinel Hub Statistical API로 구현했으나, 사용자가 이미 보유한 **Google Earth Engine**(`COPERNICUS/S2_SR_HARMONIZED`)으로 전환했다(CDSE도 검토했으나 GEE로 확정). `ee.ImageCollection.map()`으로 장면마다 SCL 기반 구름마스크·NDVI·NDMI를 서버 사이드에서 계산하고 `reduceRegion`으로 AOI 평균만 받는다 — 픽셀 래스터 전체를 로컬로 내려받지 않는다. `aggregate_array()`로 시계열 전체를 4번의 `getInfo()` 호출로 가져오므로 장면 수만큼 왕복하지 않는다. `GEE_PROJECT_ID`가 `.env`에 없거나 초기화가 실패하면 예외 대신 `status:"degraded", fallback_tier:3, data.scenes:[]`를 반환 — §0.5 "AI가 실패해도 서비스가 작동하는 설계"를 코드로 강제한 지점. **2026-08-30 정정**: 최초 구현은 Sentinel-2만 지원했으나(아래 원문 그대로 남겨둠), 이제 `sar_vv_mean`(Sentinel-1 IW/VV backscatter 기간평균, `_fetch_sar_vv_mean`)을 함께 반환한다 — 자세한 배경은 § Module CHG 구현 상태의 "SAR 융합 추가" 참조. `composite_ref`는 여전히 항상 `null`이다 — 대신 같은 목적(지도에 실제 위성영상을 얹는 것)을 별도 모듈 `module_obs/thumbnail.py`가 담당하게 됐다(§8 Before/After 구현 상태 참조). `composite_ref` 필드 자체를 채우는 대신 완전히 분리된 이유: Module OBS의 `run()`(시계열 통계 조회)과 썸네일 생성은 호출 빈도·비용 특성이 달라서(전자는 배치, 후자는 site 1건씩 on-demand) 같은 함수에 얹으면 배치 조회 성능(§12 B급)이 오염된다.
 
 **유방동 AOI로 실제 검증됨** — `GEE_PROJECT_ID` 등록 후(Earth Engine API가 해당 Cloud 프로젝트에서 비활성 상태였던 걸 콘솔에서 활성화) 2026-06-01~08-25 구간에서 NDVI 0.51~0.58 수준의 실제 관측치를 받았다. **실증 중 발견·수정한 버그**: `CLOUDY_PIXEL_PERCENTAGE`는 Sentinel-2 타일(최대 110×110km) 전체 기준이라, 우리 AOI처럼 작은 영역은 타일 다른 곳의 구름 때문에 실제로는 맑은 장면도 걸러지는 문제가 실측으로 확인됐다. 그래서 타일 메타데이터 필터는 후보를 줄이는 넓은 예비필터(80%)로만 쓰고, 실제 채택 기준은 `reduceRegion`으로 계산한 **AOI 자체의 유효(비구름) 픽셀 비율**(`MIN_AOI_VALID_RATIO=0.5`)로 바꿨다. `pytest module_obs/tests/ -v`의 라이브 테스트(`test_live_fetch_returns_scenes_when_credentials_present`)가 실제 API 호출로 통과함을 확인 — `conftest.py`가 `.env`를 자동 로드해 pytest에서도 자격증명을 인식한다.
 
@@ -287,35 +287,40 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 { "aoi_id": "YONGIN_YUBANG", "site_geometry_5179": { "type": "Polygon", "coordinates": [] },
   "baseline_period": ["2024-06-01", "2024-08-31"], "current_period": ["2026-06-01", "2026-08-31"] }
 
-// output (data)
+// output (data) — sar_vv_delta/sar_anomaly는 2026-08-30 추가(아래 "SAR 융합 추가" 참조)
 { "anomaly_score": 0.72, "changed_area_ratio": 0.18,
-  "change_type_hint": "vegetation_decline", // "vegetation_decline" | "moisture_increase" | "bare_ground_increase" | "no_significant_change"
-  "source": "observed", "confidence_interval": [0.61, 0.83] }
+  "change_type_hint": "vegetation_decline", // "vegetation_decline" | "moisture_increase" | "bare_ground_increase" | "no_significant_change" | "possible_change_sar_only"
+  "source": "observed", "confidence_interval": [0.61, 0.83],
+  "sar_vv_delta": 2.5, "sar_anomaly": 0.833 }
 ```
 
-`change_type_hint`는 원인 진단이 아니라 **"무엇이 달라졌는지"에 대한 힌트**일 뿐이다 — §3.4의 범위 제한 원칙(종 판독 금지)을 지킨다. 폴백: Sentinel-2+1 융합 → Sentinel-2 단독(§4.3).
+`change_type_hint`는 원인 진단이 아니라 **"무엇이 달라졌는지"에 대한 힌트**일 뿐이다 — §3.4의 범위 제한 원칙(종 판독 금지)을 지킨다. 폴백: Sentinel-2+1 융합 → Sentinel-2 단독 → Sentinel-1 단독(§4.3, 2026-08-30부터 실제로 이 3단계가 다 구현됨).
 
 **구현 상태(2026-08-29)**: `module_chg/run.py` — Module OBS를 baseline/current 두 번 호출해 NDVI/NDMI **scene 평균의 편차**로 `anomaly_score`를 계산한다. **중요한 근사**: 현재 `changed_area_ratio`는 진짜 픽셀 단위 변화면적이 아니라 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서 Earth Engine `reduceRegion` histogram 기반 pixel-wise diff로 교체 예정) — Backtest A(§10)에서 이 근사가 실제와 얼마나 다른지 반드시 검증할 것. `python -m pytest module_chg/tests/ -v`로 mock 기반 단위 테스트(자격증명 불필요) 통과 확인됨.
 
 **리팩터링(2026-08-29)**: 이상도 계산 로직을 `compute_change_from_scenes(baseline_scenes, current_scenes)` 순수 함수로 분리했다 — `run()`은 이 함수를 부르기 전에 Module OBS를 호출할 뿐이다. 배치 파이프라인(`scripts/run_priority_queue_batch.py`)이 `module_obs.batch.run_batch()`로 얻은 scene 리스트에 이 함수를 그대로 재사용해서, 분류 임계치·정규화 상수(`ANOMALY_THRESHOLD_FOR_CHANGE` 등)가 단일/배치 두 경로에서 따로 놀지 않는다.
+
+**SAR 융합 추가(2026-08-30, 리서치 정합성 점검 반영)**: 원 리서치(수상전략 심층 리서치 PDF)를 다시 확인해보니 "Top 1 — 수변가드 AI"의 "핵심 기술"은 명시적으로 **"S1/S2 변화탐지"**였고, 5대 기술적 해자 1번이 "Multisensor Spatial-Temporal Fusion"이었다 — 그런데 최초 구현은 Sentinel-2(NDVI/NDMI)만 넣고 Sentinel-1 SAR를 빠뜨렸다(사용자가 "NDVI만으로 완성도가 있는가"를 되짚어보자고 지적해서 발견, 2026-08-30). 리서치는 이 신호가 왜 필요한지도 명시한다: "원격탐사 참가자의 흔한 결과는 NDVI 지도다" — 즉 NDVI/NDMI만으로는 딱 흔한 baseline에 머무른다는 뜻. `compute_change_from_scenes()`에 `baseline_sar_vv_mean`/`current_sar_vv_mean`(Module OBS의 `sar_vv_mean`, Sentinel-1 IW/VV backscatter dB) 파라미터를 추가했다. **역할을 두 가지로 제한**: (1) 광학 scene이 둘 다 있으면 SAR는 판정을 바꾸지 않고 `sar_vv_delta`/`sar_anomaly`(0~1 정규화, `SAR_VV_DELTA_NORMALIZATION_DB=3.0`)로 보조 근거만 얹는다 — `change_type_hint`는 여전히 NDVI/NDMI 기준. (2) 광학 scene이 구름 등으로 아예 없는데 SAR 평균은 둘 다 있으면(all-weather 특성), SAR 단독으로 `anomaly_score`를 근사하고 `change_type_hint="possible_change_sar_only"`, `source="observed_sar_fallback"`으로 표시해 낮은 신뢰도임을 숨기지 않는다. **의도적으로 안 한 것**: SAR backscatter 변화로 "식생/토양/구조물 중 무엇이 바뀌었는지" 판독하지 않는다 — 그건 리서치의 "매우 중요한 범위 제한"이 명시적으로 경고한 과잉해석이다. `module_obs/run.py`(단일 site, `reduceRegion`)와 `module_obs/batch.py`(다중 site, `reduceRegions`)에 각각 SAR 조회를 추가했는데, **실측으로 발견한 함정**: 단일 밴드("VV") 이미지를 `reduceRegions`로 여러 site에 한 번에 돌리면 출력 컬럼명이 밴드명이 아니라 reducer 기본 출력명인 `"mean"`이 된다(다중 밴드였던 NDVI/NDMI 배치 조회와 다름) — 처음엔 `"VV"`로 읽어서 50개 site 전부 `sar_vv_delta:null`이 나왔고, 실제 site 하나로 직접 `getInfo()` 결과를 찍어봐서 원인을 찾았다. `pytest module_chg/tests/ -v`에 SAR 단독/병행 케이스 테스트 추가, `data/processed/hanriver_priority_queue.geojson`·`yongin_yubang_priority_queue.geojson` 60개 site 전부 재생성해 실제 SAR 값(`sar_vv_delta` 대략 -5.4~+3.7dB)이 반영됨을 확인.
 
 ### Module AGG — GIS 공간 집계 (`module_agg`)
 
 ```jsonc
 // input — Module CHG 출력을 관리대상지 단위로 묶음
 { "site_id": "A1037", "pnu": "4146110500100780003",
-  "chg_results": [ { "anomaly_score": 0.72, "changed_area_ratio": 0.18 } ],
+  "chg_results": [ { "anomaly_score": 0.72, "changed_area_ratio": 0.18, "sar_anomaly": 0.4 } ],
   "site_attributes": { "restoration_elapsed_days": 420, "last_inspection_days_ago": 63,
-    "adjacent_to_water": true, "past_anomaly_count": 1 } }
+    "adjacent_to_water": true, "past_anomaly_count": 1, "recent_rainfall_mm": 20.0 } }
 
 // output (data)
 { "site_id": "A1037", "features": {
-    "anomaly_score_mean": 0.72, "changed_area_ratio": 0.18,
+    "anomaly_score_mean": 0.72, "changed_area_ratio": 0.18, "sar_anomaly_mean": 0.4,
     "adjacent_to_water": true, "restoration_elapsed_days": 420,
-    "last_inspection_days_ago": 63, "past_anomaly_count": 1 } }
+    "last_inspection_days_ago": 63, "past_anomaly_count": 1, "recent_rainfall_mm": 20.0 } }
 ```
 
 **구현 상태(2026-08-29)**: `module_agg/run.py` — Module CHG 결과(들)를 평균해 `anomaly_score_mean`/`changed_area_ratio`를 만들고, `site_attributes`는 그대로 통과시킨다. **중요한 제약**: `site_attributes`(복원경과일·최근점검일·인접수계여부·과거이상이력)는 KECI 내부 자산 DB에서 와야 하는데 이 프로토타입은 접근권한이 없다(개발_핸드오프_브리프 §2). 현재는 호출부가 채울 수 있는 값만 채우고 나머지는 `null`로 둔다 — Module RISK가 `null`을 "0 기여"로 안전하게 처리한다(아래 참조). `pytest module_agg/tests/ -v` 통과.
+
+**요인 추가(2026-08-30)**: `sar_anomaly_mean`(Module CHG의 `sar_anomaly` 평균 — § Module CHG "SAR 융합 추가" 참조)과 `recent_rainfall_mm`(`site_attributes`로 통과, 호출부가 `common/weather.py`로 채움)을 추가했다. 원 리서치의 Top1 개념 설명이 "대상지 속성·**최근 기상**·과거 점검결과를 결합해... 위험도를 산정한다"라고 명시했는데 최초 구현엔 기상 요인이 아예 없었다 — `recent_rainfall_mm`도 이 SITE_ATTRIBUTE_KEYS 목록에 추가해서 같은 결측 처리 원칙(없으면 0 기여)을 그대로 적용한다.
 
 ### Module RISK — 위험도 산정 (`module_risk`)
 
@@ -324,38 +329,45 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 ```jsonc
 // input — Module AGG의 features를 받음
 { "site_id": "A1037", "features": {
-    "anomaly_score_mean": 0.72, "changed_area_ratio": 0.18,
+    "anomaly_score_mean": 0.72, "changed_area_ratio": 0.18, "sar_anomaly_mean": 0.4,
     "adjacent_to_water": true, "restoration_elapsed_days": 420,
-    "last_inspection_days_ago": 63, "past_anomaly_count": 1 } }
+    "last_inspection_days_ago": 63, "past_anomaly_count": 1, "recent_rainfall_mm": 20.0 } }
 
-// output (data) — risk_score가 최종 output. 아래 값은 module_risk/run.py 실제 실행 결과(2026-08-29 검증)
-{ "site_id": "A1037", "risk_score": 54, "risk_tier": "2순위",
+// output (data) — risk_score가 최종 output. 아래 값은 module_risk/run.py 실제 실행 결과(2026-08-30 재검증,
+// SAR·최근강우 요인 추가로 가중치를 재조정하기 전에는 이 예시가 54점이었다)
+{ "site_id": "A1037", "risk_score": 51, "risk_tier": "2순위",
   // risk_tier ∈ {"1순위"(>=70),"2순위"(>=50),"3순위"(>=30),"정상"}. "rank"(대기열 순번, §Module O)와는 별개 개념
   "contributing_factors": [
-    { "factor": "anomaly_score_mean", "value": 0.72, "weight": 0.35 },
-    { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.20 },
+    { "factor": "anomaly_score_mean", "value": 0.72, "weight": 0.30 },
+    { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.15 },
     { "factor": "last_inspection_days_ago", "value": 63, "weight": 0.15 },
-    { "factor": "adjacent_to_water", "value": true, "weight": 0.15 },
-    { "factor": "past_anomaly_count", "value": 1, "weight": 0.15 }
+    { "factor": "sar_anomaly_mean", "value": 0.4, "weight": 0.10 },
+    { "factor": "recent_rainfall_mm", "value": 20.0, "weight": 0.10 },
+    { "factor": "adjacent_to_water", "value": true, "weight": 0.10 },
+    { "factor": "past_anomaly_count", "value": 1, "weight": 0.10 }
   ],
   "model_version": "rule_v1", "source": "rule_based" } // "rule_based" | "ml_ranking"
 ```
 
-`risk_score` 산출식(1단계, rule baseline):
+`risk_score` 산출식(1단계, rule baseline, 2026-08-30 재조정):
 
 ```
 risk_score = 100 × clip(
-  0.35 × anomaly_score_mean
-  + 0.20 × changed_area_ratio
+  0.30 × anomaly_score_mean
+  + 0.15 × changed_area_ratio
+  + 0.10 × sar_anomaly_mean            // 2026-08-30 추가 — 광학 이상도의 보조 근거(§Module CHG)
+  + 0.10 × min(recent_rainfall_mm / 50, 1.0)  // 2026-08-30 추가 — "최근 기상" 요인(common/weather.py)
   + 0.15 × min(last_inspection_days_ago / 180, 1.0)
-  + 0.15 × adjacent_to_water(0|1)
-  + 0.15 × min(past_anomaly_count / 3, 1.0)
+  + 0.10 × adjacent_to_water(0|1)
+  + 0.10 × min(past_anomaly_count / 3, 1.0)
 , 0, 1)
 ```
 
 가중치는 초기 가정값 — Backtest B(§10)에서 실제 이상사례 기준으로 보정한다. `contributing_factors`는 Module AGENT가 "왜 1순위인가"를 설명할 때 그대로 인용하는 근거 데이터다(숫자를 만들지 않고 tool output을 읽는 원칙, §0.4).
 
-**구현 상태(2026-08-29)**: `module_risk/run.py` — 위 산출식을 그대로 구현. `features`의 특정 항목이 `null`이면(§ Module AGG의 KECI 내부 데이터 접근 제약 참조) 해당 가중항을 0으로 처리하고 `contributing_factors`에서 빼며, `status:"degraded"`로 표시해 "이 점수는 일부 요인 없이 계산됐다"는 사실을 숨기지 않는다. `risk_tier` 경계값은 70/50/30(§ 위 주석)으로 확정. `pytest module_risk/tests/ -v`에 위 A1037 예시(risk_score=54)를 정확히 재현하는 회귀 테스트가 있다 — 가중치를 바꾸면 이 테스트도 함께 갱신할 것.
+**구현 상태(2026-08-29)**: `module_risk/run.py` — 위 산출식을 그대로 구현. `features`의 특정 항목이 `null`이면(§ Module AGG의 KECI 내부 데이터 접근 제약 참조) 해당 가중항을 0으로 처리하고 `contributing_factors`에서 빼며, `status:"degraded"`로 표시해 "이 점수는 일부 요인 없이 계산됐다"는 사실을 숨기지 않는다. `risk_tier` 경계값은 70/50/30(§ 위 주석)으로 확정.
+
+**가중치 재조정(2026-08-30, 리서치 정합성 점검 반영)**: 원 리서치를 다시 확인해 SAR(`sar_anomaly_mean`)과 최근 강우(`recent_rainfall_mm`) 요인을 추가하면서(§ Module CHG·AGG "추가" 참조), 기존 5개 요인 합 1.0을 유지하려고 전체 가중치를 재분배했다: `anomaly_score_mean` 0.35→0.30, `changed_area_ratio` 0.20→0.15, `adjacent_to_water`·`past_anomaly_count` 각 0.15→0.10, `last_inspection_days_ago`는 0.15 유지, 새 요인 둘은 각 0.10. 광학 이상도(`anomaly_score_mean`)를 여전히 가장 큰 비중으로 남긴 이유는, 리서치의 방어 논리 자체가 "판정의 중심은 광학, SAR는 보조 근거"라는 데 있기 때문이다(SAR로 변화 종류까지 판독하려 들면 리서치가 경고한 과잉해석이 된다). `pytest module_risk/tests/ -v`의 A1037 회귀 테스트를 새 가중치·새 요인 기준으로 갱신(54점→51점) — 가중치를 다시 바꾸면 이 테스트도 함께 갱신할 것.
 
 ### Module O — 오케스트레이션 (`module_o`)
 
@@ -485,11 +497,29 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 메인 KPI: `전체 대상지 / 고위험 대상지 / 미점검 고위험 / 이번주 점검완료 / 실제 이상확인 / Precision@K`
 
-**구현 상태(2026-08-29)**: `ui/`(Next.js + MapLibre GL JS)가 6개 중 5개를 구현했다 — Map, Priority Queue, **Before/After**, Time Series, Evidence Card, Inspection. **Time Series**는 SAR 없이 NDVI만 순수 SVG 스파크라인으로 표시 중(외부 차트 라이브러리 없음, `components/TimeSeriesChart.tsx`). 메인 KPI 중 `Precision@K`는 Module VERIFY가 구현됐지만 UI에는 아직 노출하지 않았다(백테스트는 `/verify/backtest`로만 조회 가능, §12 TODO). 실제 브라우저에서 지도 클릭 → Evidence Card → 현장점검 등록 → Priority Queue 상태 갱신까지 end-to-end로 확인됨.
+**구현 상태(2026-08-29)**: `ui/`(Next.js + MapLibre GL JS)가 6개 중 5개를 구현했다 — Map, Priority Queue, **Before/After**, Time Series, Evidence Card, Inspection. **Time Series**는 SAR 없이 NDVI만 순수 SVG 스파크라인으로 표시 중(외부 차트 라이브러리 없음, `components/TimeSeriesChart.tsx`). 메인 KPI 중 `Precision@K`는 Module VERIFY가 구현됐지만 UI에는 아직 노출하지 않았다(백테스트는 `/verify/backtest`로만 조회 가능, §12 TODO — **2026-08-30 해소, 아래 참조**). 실제 브라우저에서 지도 클릭 → Evidence Card → 현장점검 등록 → Priority Queue 상태 갱신까지 end-to-end로 확인됨.
 
 **Before/After 완료(2026-08-29, 사용자 지적 반영)**: "왜 위성지도인가"라는 질문에 답하기 위해 `module_obs/thumbnail.py`(Earth Engine `getThumbURL()`)로 실제 NDVI 컬러 이미지를 만들어 (1) Evidence Card에 기준기간·현재기간 나란히, (2) 선택된 대상지 위치에 지도 위 실제 좌표로 겹쳐서 보여준다(`components/NdviThumbnails.tsx`, `MapView.tsx`의 `ndvi-overlay` image source). 60개 전부를 미리 만들지 않고 선택한 site 1건만 그때 생성한다(§7 `GET /sites/{id}/thumbnails`, on-demand) — 배치 조회(§12 B급)의 이점을 스스로 깎아먹지 않기 위해서다. 실제 확인: 여주시 대신면 양촌리 369-5 필지에서 2024-06-10/2026-06-15 두 장의 실제 위성 이미지(각 6.4KB PNG)를 받아 브라우저에서 렌더링 확인.
 
 **버그 발견·수정(2026-08-29)**: 사용자가 "왼쪽 리스트에서 클릭하면 지도가 그 위치로 이동해야 한다"고 요청해서 재현했더니, 실제로 **지도가 전혀 움직이지 않는 버그**가 있었다. 원인: `MapView.tsx`의 두 effect가 전부 `if (map.isStyleLoaded()) X(); else map.once("load", X);` 패턴을 썼는데, 이 샌드박스 환경에서는 래스터 베이스맵 타일이 끝까지 로드되지 않아 `isStyleLoaded()`가 계속 `false`를 반환했다. 그러면 매번 `map.once("load", ...)`로 다시 구독하는데, `"load"`는 1회성 이벤트라 맵 생성 시 이미 한 번 발생한 뒤로는 다시 오지 않는다 — 그래서 대상지를 선택해도 콜백이 영원히 실행 안 됐다. **수정**: `isStyleLoaded()` 대신 `map.getSource("sites")`/`map.getSource("ndvi-overlay")`가 이미 존재하는지(= `"load"` 핸들러가 이미 실행됐는지)로 판단하도록 바꿨다 — 존재하면 즉시 실행, 없으면만 `"load"`를 기다린다. `window.__debugMap` 임시 훅으로 `map.getCenter()`/`getZoom()`/소스 좌표를 직접 찍어 수정 전후를 실측 비교해 확인했다(수정 전: 클릭해도 카메라 고정, overlay 좌표가 placeholder인 채 그대로. 수정 후: 여러 site를 연속 선택해도 매번 정확한 필지 위치로 확대되고 NDVI 오버레이 좌표가 실제 bbox로 갱신됨). 이 버그는 처음 커밋했을 때부터 있었다 — 그 세션에서는 데이터 흐름(네트워크 요청 성공, 이미지 렌더링)만 확인하고 지도 카메라의 실제 이동은 확인하지 않아서 놓쳤다.
+
+**추가 UX 정리(2026-08-29~30, 사용자 지적 반영)**:
+- **"Map data not yet available" 깜빡임**: Esri World Imagery 타일을 직접 떠서 확인해보니 시골 지역(용인/여주/가평 등)은 zoom 19부터 실제 이미지 없이 저 placeholder를 그대로 반환한다(실측 확인). 대상지 확대 애니메이션 중 순간적으로 그 줌에 걸려서 생긴 문제였다 — `esri` 래스터 소스에 `maxzoom: 18` 캡을 걸어서, 그 이상은 z18 타일을 확대(overzoom)해 쓰게 했다.
+- **위성 이미지 로딩 표시**: NDVI 오버레이 fetch 중에는 지도 위에 "위성 이미지 불러오는 중..." 배너를 띄운다(§ Earth Engine 응답이 보통 3~7초 걸림, 오류로 오해하지 않도록) — `overlayReadySiteId` 상태를 selectedSiteId와 비교해 파생시키는 방식이라 effect 본문에서 동기 setState를 안 쓴다.
+- **Priority Queue 행정동 그룹핑**: 60개 site 플랫 리스트가 안 읽혀서, 각 site의 `addr`(PNU 기반, 예: "경기도 여주시 대신면 양촌리 369-5")에서 "시군구 읍면동"만 뽑아 그룹 헤더로 묶었다(`PriorityQueueList.tsx`의 `parseDong()`) — 별도 shapefile 조인 없이 이미 있는 주소 문자열만으로 충분했다. 그룹 순서는 원래 순위(rank) 순서를 그대로 따라가므로 가장 급한 동이 자연히 맨 위에 온다.
+- **행정동 경계 배경 레이어(데이터만 보존, 지도 통합은 보류)**: "대상지 폴리곤이 배경 없이 사각형처럼 보인다"는 지적에 대해, 실은 NDVI 썸네일의 bounding box일 뿐이라고 설명했지만, 사용자가 전국 읍면동 경계 shapefile(`BND_ADM_DONG_PG`, EPSG:5186, 필드 ADM_CD/ADM_NM/BASE_DATE만 존재)을 제공해서 실제 시각적 맥락까지 추가하려 했다. `scripts/build_admin_dong_boundaries.py`가 대상지 60건의 경계상자(+5km 버퍼)와 교차하는 읍면동만 골라(3559건→144건) `ui/public/admin_dong_boundaries.geojson`으로 저장한다(0.0001도 단순화로 6MB→1.4MB) — 이 스크립트와 파일은 그대로 남아있다. **하지만 `MapView.tsx`에 실제로 붙이는 건 뺐다** — 이 선이 화면에 안 보인다는 조사가 아래 "MapLibre GL v6 벡터 레이어 렌더링 회귀" 버그 발견으로 이어졌고, 그 버그 자체가 admin-dong과 무관하게 sites-fill 등 다른 벡터 레이어에도 이미 있었다는 게 밝혀지면서 admin-dong 통합은 우선순위가 낮아졌다. 필요해지면 저장된 GeoJSON을 `MapView.tsx`에 GeoJSON 소스+line 레이어로 다시 붙이기만 하면 된다.
+- **Evidence Agent 채팅 위젯으로 재설계**: 사이드 패널에 고정 박혀있던 "Evidence Agent에게 물어보기"를 빼고, 화면 우하단 원형 AI 버튼을 누르면 펼쳐지는 채팅창(`AgentChatWidget.tsx`)으로 바꿨다(참고 스크린샷의 Aqua Guard.AI 패턴). 대상지를 바꾸면 `key={siteId}`로 채팅 스레드가 통째로 리마운트돼 새 대화로 초기화된다. 답변은 `TypewriterText.tsx`(공용 컴포넌트, 주간보고서와 공유)로 한 글자씩 흘려보낸다. Module AGENT의 시스템 프롬프트 답변 길이 한도도 "3문장 이내"→"6문장 이내"로 완화했다(`module_agent/run.py`).
+- **성과 검증(Backtest)·주간보고서 화면 추가**: 백엔드에만 있던 `GET /verify/backtest`, `POST /reports/weekly`를 각각 모달로 노출했다(`BacktestModal.tsx`, `WeeklyReportModal.tsx`, 헤더의 "성과 검증"/"주간보고서" 버튼). Backtest 모달은 Precision@K·Recall@Top20%·baseline 비교표·leakage 경고를 그대로 보여준다 — "예측 정확도는 어디 있나"라는 심사질문에 답할 화면이 이제 실제로 존재한다.
+- **필지 고정 크기 마커 추가**: 대상지 폴리곤이 수백 m²라, 한강유역 6개 시/군/구를 한 화면에 담는 줌에서는 진짜 모양(`sites-fill`)이 화면에 몇 픽셀도 안 나온다는 사용자 지적("색깔 필지가 안 보인다") — 줌과 무관하게 항상 일정 크기(선택 시 10px, 평시 6px)로 보이는 `circle` 레이어를 대상지 centroid 위치에 별도로 얹었다(`sites-markers` 레이어, `sites-points` 소스). `circle` 레이어는 Point/MultiPoint geometry만 그리고 Polygon 피처는 조용히 무시하므로, 기존 `sites`(Polygon) 소스에 그대로 얹을 수 없어 Point 전용 소스를 새로 만들고 `approxCentroid()`(꼭짓점 평균, turf 없이 계산)로 좌표를 구했다. 클릭·hover 핸들러도 `sites-fill`과 `sites-markers` 양쪽에 다 걸었다.
+
+**버그 발견·수정(2026-08-30) — MapLibre GL v6.6.0 벡터 레이어 렌더링 회귀**: 위 마커를 추가했는데도 "여전히 안 보인다"는 신고가 이어졌다. 원인 조사 과정(아래)에서 이 프로젝트 최대 규모의 버그를 찾았다:
+
+1. 처음엔 `map.on("load", ...)`가 이 환경에서 전혀 안 오는 걸로 보였다(진단 배지로 확인) — "load"/"idle"/"styledata" 3중 이벤트 + `isStyleLoaded()` 가드 + 1초 폴링까지 다 걸어 자가복구하도록 `setupLayers()`를 재작성했다(`waitForSource()` 헬퍼도 같은 이유로 도입 — `map.once("load", cb)`는 "load"가 이미 소비된 뒤엔 다시 안 온다는, §5 Module UI-3D 위 항목과 동일 계열의 함정).
+2. 그렇게 고친 뒤에도 색깔 필지가 안 보였다. 브라우저 콘솔에서 `"sitesDebug is not defined"` 크래시를 발견 — 이미 지운 변수를 낡은 Turbopack HMR 빌드가 계속 참조하고 있었다(`.next` 캐시 삭제 + 완전히 새 탭으로 해결).
+3. 크래시를 고친 뒤에도 안 보였다. **진짜 원인**: `queryRenderedFeatures()`/`querySourceFeatures()`/`canvas.toDataURL()` 등 모든 JS 레벨 진단이 실제 화면 상태와 안 맞는(값이 다 0이거나 빈 캔버스인) 환경에서, 실제 스크린샷(`computer` 도구)만이 신뢰할 수 있는 근거였다 — 반경 30px 새빨간 원을 화면 정중앙에 강제로 찍어도 전혀 안 보였다. `esri` 래스터 레이어는 정상 렌더링되는데 `fill`/`line`/`circle` 등 **벡터 레이어만 전부 안 그려지는** 패턴이었다. 브라우저의 WebGL2 컨텍스트 정보를 직접 찍어보니 `renderer: "WebKit WebGL"` — Claude Code 브라우저 패널 자체가 (테스트 환경 한정으로) Chromium이 아닌 렌더링 백엔드를 쓰고 있었다.
+4. 사용자가 실제 Chrome/Edge에서 별도로 테스트해준 결과, **Chrome은 되고 Edge는 안 됨**을 확인 — 완전히 같은 "래스터만 되고 벡터는 안 됨" 패턴이 사용자의 실제 브라우저에서도 재현됐다. `maplibre-gl`을 `6.6.0`(당시 최신)에서 `5.24.0`(직전 메이저)으로 다운그레이드하니 테스트 환경·사용자 환경(Edge 포함) 전부 즉시 해결됐다 — **v6.6.0이 특정 WebGL 백엔드(구형 ANGLE/D3D 경로 등)에서 벡터 레이어를 그리지 못하는 회귀 버그**였던 것으로 결론. `ui/package.json`의 `maplibre-gl`을 `^5.24.0`으로 고정(caret가 메이저 버전 경계는 넘지 않으므로 향후 `npm install`로 6.x가 다시 딸려올 일은 없음).
+
+**교훈**: 이 세션에서 나온 "지도 데이터가 이상하다"류 버그 대부분이 실은 이 하나의 라이브러리 회귀에서 비롯됐을 가능성이 크다(admin-dong 경계선이 안 보였던 것도 포함). JS 레벨 진단(`isStyleLoaded()`, `queryRenderedFeatures()` 등)이 서로 모순되게 나올 때는 라이브러리/렌더링 백엔드 자체를 의심하고, 실제 스크린샷과 사용자의 다른 브라우저(Chrome vs Edge) 비교가 가장 확실한 증거였다.
 
 ---
 
@@ -568,7 +598,7 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 |---|---|---|
 | 8/29–8/31 | Scope Lock, 리포 세팅(이 문서) | README/ARCHITECTURE 확정, 공식 붙임1 PDF 재확인 |
 | 8/29 | **Data MVP 완료** — 유방동 82/85필지(96.5%) + 한강유역 전체 5,526/6,275필지(88.1%) polygon 복원·시각 검증(§3.2) | `data/processed/yongin_yubang_parcels.geojson`, `hanriver_maesu_parcels.geojson` |
-| 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료) | Sentinel-2 시계열 파이프라인, vegetation/moisture anomaly, before-after |
+| 9/6–9/10 | **Module OBS + CHG 완료** (2026-08-29 조기 착수, GEE 실증까지 완료; SAR 융합은 2026-08-30 추가) | Sentinel-2 시계열 파이프라인, vegetation/moisture/**SAR** anomaly, before-after |
 | 9/11–9/14 | **Module AGG + RISK(rule) 완료** (2026-08-29 조기 착수) — 유방동 실제 필지 10건으로 end-to-end 파이프라인(OBS→CHG→AGG→RISK) 실증까지 완료 | 대상지 단위 feature, rule baseline, `data/processed/yongin_yubang_priority_queue.geojson` |
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
 | 9/19–9/22 | **Module O + FIELD + API 서버 + UI 전부 완료**(2026-08-29 조기 착수) | `api_server.py`(FastAPI, 6개 엔드포인트), `ui/`(Next.js+MapLibre) — 지도 클릭→Evidence Card→현장점검 등록→큐 갱신까지 브라우저에서 end-to-end 확인 |
@@ -593,4 +623,4 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 **막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 저장소 루트에서 `python -m pytest -v`(`conftest.py`가 `.env`를 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`. 서버·UI를 띄우려면 `python -m uvicorn api_server:app --port 8001`(백엔드) 후 `cd ui && npm run dev`(프론트) — `ui/lib/api.ts`의 `NEXT_PUBLIC_API_BASE` 기본값이 `http://localhost:8001`.
 
-**알려진 한계(2026-08-29, 아직 안 고친 것)**: `scripts/run_priority_queue_demo.py`가 만드는 `site_attributes`는 전부 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·인접수계여부·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio` 두 요인(가중치 합 0.55)만으로 계산돼 최대치가 구조적으로 낮다 — 유방동 10필지 실증에서 전부 "정상"(risk_score 2~16)로 나온 것은 실제로 이상이 없어서일 수도 있지만, 요인 결측 때문에 점수 자체가 눌려 있을 가능성도 크다. `adjacent_to_water`는 실제로는 GEE의 수체 레이어(JRC Global Surface Water 등)로 계산 가능한 값이니 §12 B급 확장 우선순위로 다음에 붙일 것.
+**알려진 한계(2026-08-29, 2026-08-30 일부 해소)**: `scripts/run_priority_queue_demo.py`/`run_priority_queue_batch.py`가 만드는 `site_attributes` 중 `recent_rainfall_mm`은 이제 채워진다(`common/weather.py`, Open-Meteo). 그러나 `restoration_elapsed_days`·`last_inspection_days_ago`·`adjacent_to_water`·`past_anomaly_count`는 여전히 빈 값이다 — KECI 내부 자산 DB(복원경과일·최근점검일·인접수계여부·과거이상이력)에 접근할 방법이 없기 때문(§ Module AGG 구현 상태). 그래서 지금 나오는 risk_score는 `anomaly_score_mean`+`changed_area_ratio`+`sar_anomaly_mean`+`recent_rainfall_mm` 네 요인(가중치 합 0.65)만으로 계산돼 최대치가 구조적으로 낮다. `adjacent_to_water`는 실제로는 GEE의 수체 레이어(JRC Global Surface Water 등)로 계산 가능한 값이니 §12 B급 확장 우선순위로 다음에 붙일 것.

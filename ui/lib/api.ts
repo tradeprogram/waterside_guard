@@ -106,6 +106,29 @@ export async function postInspection(payload: {
   return body as Envelope<{ site_id: string; inspection_id: string; status: string }>;
 }
 
+export type BacktestResult = {
+  precision_at_k: { k: number; value: number | null };
+  recall_at_top20pct: number | null;
+  baseline_comparison: { baseline: string; precision_at_k: number | null }[];
+  labeled_site_count: number;
+  positive_count: number;
+};
+
+export function fetchBacktest(k: number) {
+  return getJson<Envelope<BacktestResult>>(`/verify/backtest?period=current&k=${k}`);
+}
+
+export async function generateWeeklyReport(weekOf: string) {
+  const res = await fetch(`${API_BASE}/reports/weekly`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ week_of: weekOf }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(JSON.stringify(body));
+  return body as Envelope<{ week_of: string; report_text: string; tools_used: string[] }>;
+}
+
 export async function askSite(siteId: string, question: string) {
   const res = await fetch(`${API_BASE}/sites/${encodeURIComponent(siteId)}/ask`, {
     method: "POST",
