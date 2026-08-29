@@ -23,10 +23,11 @@ import pandas as pd
 from dotenv import load_dotenv
 from shapely.geometry import mapping
 
-from common.geo import geometry_5179_to_4326
+from common.geo import geometry_5179_to_4326, point_5179_to_4326
+from common.weather import fetch_recent_rainfall_mm
 from module_agg.run import run as agg_run
 from module_chg.run import compute_change_from_scenes
-from module_obs.batch import run_batch
+from module_obs.batch import run_batch, run_batch_sar
 from module_risk.run import run as risk_run
 
 BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
@@ -75,19 +76,39 @@ def main() -> None:
         sites_for_obs.append({"site_id": site_id, "geometry_4326": geometry_4326})
         site_meta[site_id] = {"pnu": row.pnu, "jibun": row.jibun, "addr": row.addr, "geometry": row.geometry}
 
-    print("Earth Engine 배치 조회 — 기준기간(2024)...")
+    print("Earth Engine 배치 조회 — Sentinel-2 기준기간(2024)...")
     baseline_result = run_batch({"sites": sites_for_obs, "date_range": BASELINE_PERIOD})
-    print("Earth Engine 배치 조회 — 현재기간(2026)...")
+    print("Earth Engine 배치 조회 — Sentinel-2 현재기간(2026)...")
     current_result = run_batch({"sites": sites_for_obs, "date_range": CURRENT_PERIOD})
+    # SAR(Sentinel-1)는 구름과 무관하게 관측되므로 광학과 별개로 조회한다(§module_obs/batch.py).
+    print("Earth Engine 배치 조회 — Sentinel-1 SAR 기준기간(2024)...")
+    baseline_sar_result = run_batch_sar({"sites": sites_for_obs, "date_range": BASELINE_PERIOD})
+    print("Earth Engine 배치 조회 — Sentinel-1 SAR 현재기간(2026)...")
+    current_sar_result = run_batch_sar({"sites": sites_for_obs, "date_range": CURRENT_PERIOD})
 
     baseline_by_site = baseline_result["data"]["scenes_by_site"]
     current_by_site = current_result["data"]["scenes_by_site"]
+    baseline_sar_by_site = baseline_sar_result["data"]["sar_vv_mean_by_site"]
+    current_sar_by_site = current_sar_result["data"]["sar_vv_mean_by_site"]
+
+    print("Open-Meteo 최근 강우량 조회...")
+    rainfall_by_site: dict[str, float | None] = {}
+    for site_id, meta in site_meta.items():
+        centroid_5179 = meta["geometry"].centroid
+        lon, lat = point_5179_to_4326(centroid_5179.x, centroid_5179.y)
+        rainfall_by_site[site_id] = fetch_recent_rainfall_mm(lat, lon, as_of_date=CURRENT_PERIOD[1])
 
     rows = []
     for site_id, meta in site_meta.items():
         baseline_scenes = baseline_by_site.get(site_id, [])
         current_scenes = current_by_site.get(site_id, [])
-        computed = compute_change_from_scenes(baseline_scenes, current_scenes)
+        recent_rainfall_mm = rainfall_by_site.get(site_id)
+        computed = compute_change_from_scenes(
+            baseline_scenes,
+            current_scenes,
+            baseline_sar_vv_mean=baseline_sar_by_site.get(site_id),
+            current_sar_vv_mean=current_sar_by_site.get(site_id),
+        )
 
         if computed is None:
             anomaly_score = None
@@ -95,14 +116,22 @@ def main() -> None:
             contributing_factors: list = []
             risk_score = None
             risk_tier = None
+            sar_vv_delta = None
         else:
-            agg_result = agg_run({"site_id": site_id, "chg_results": [computed], "site_attributes": {}})
+            agg_result = agg_run(
+                {
+                    "site_id": site_id,
+                    "chg_results": [computed],
+                    "site_attributes": {"recent_rainfall_mm": recent_rainfall_mm},
+                }
+            )
             risk_result = risk_run({"site_id": site_id, "features": agg_result["data"]["features"]})
             anomaly_score = computed["anomaly_score"]
             change_type_hint = computed["change_type_hint"]
             contributing_factors = risk_result["data"]["contributing_factors"]
             risk_score = risk_result["data"]["risk_score"]
             risk_tier = risk_result["data"]["risk_tier"]
+            sar_vv_delta = computed.get("sar_vv_delta")
 
         rows.append(
             {
@@ -114,6 +143,8 @@ def main() -> None:
                 "risk_tier": risk_tier,
                 "anomaly_score": anomaly_score,
                 "change_type_hint": change_type_hint,
+                "sar_vv_delta": sar_vv_delta,
+                "recent_rainfall_mm": recent_rainfall_mm,
                 "contributing_factors_json": json.dumps(contributing_factors, ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_scenes, ensure_ascii=False),
                 "current_scenes_json": json.dumps(current_scenes, ensure_ascii=False),

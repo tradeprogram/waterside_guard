@@ -7,6 +7,12 @@
 `features`의 값이 `None`(Module AGG가 site_attributes를 못 채운 경우, §5
 Module AGG 참조)이면 해당 가중항은 0으로 처리하고 `contributing_factors`에서
 빠진다 — 숫자를 지어내지 않는다는 원칙(§0.4)을 결측치에도 그대로 적용한다.
+
+2026-08-30: `sar_anomaly_mean`(Module CHG의 SAR 신호)과 `recent_rainfall_mm`
+(common/weather.py)을 추가했다 — 원 리서치의 Top1 개념 설명 "대상지 속성·
+최근 기상·과거 점검결과를 결합해... 위험도를 산정한다"가 처음부터 요구한
+요인인데 최초 구현에서 빠져 있었다. SAR는 광학 이상도의 보조 근거일 뿐이라
+가중치를 낮게(0.10) 뒀다 — 판정의 중심은 여전히 anomaly_score_mean이다.
 """
 from __future__ import annotations
 
@@ -15,11 +21,13 @@ from common.envelope import error_envelope, make_envelope
 # ARCHITECTURE.md §5 Module RISK의 risk_score 산출식 — 초기 가정 가중치.
 # Backtest B(§10)에서 baseline 대비 성능을 보고 재조정할 것.
 WEIGHTS = {
-    "anomaly_score_mean": 0.35,
-    "changed_area_ratio": 0.20,
+    "anomaly_score_mean": 0.30,
+    "changed_area_ratio": 0.15,
+    "sar_anomaly_mean": 0.10,  # 이미 0~1 정규화됨(Module CHG) — 광학 이상도의 보조 근거
+    "recent_rainfall_mm": 0.10,  # min(value/50, 1.0)로 정규화
     "last_inspection_days_ago": 0.15,  # min(value/180, 1.0)로 정규화
-    "adjacent_to_water": 0.15,  # bool -> 0|1
-    "past_anomaly_count": 0.15,  # min(value/3, 1.0)로 정규화
+    "adjacent_to_water": 0.10,  # bool -> 0|1
+    "past_anomaly_count": 0.10,  # min(value/3, 1.0)로 정규화
 }
 
 TIER_THRESHOLDS = [
@@ -36,6 +44,10 @@ def _normalize(factor: str, value) -> float | None:
         return max(0.0, min(float(value), 1.0))
     if factor == "changed_area_ratio":
         return max(0.0, min(float(value), 1.0))
+    if factor == "sar_anomaly_mean":
+        return max(0.0, min(float(value), 1.0))
+    if factor == "recent_rainfall_mm":
+        return min(float(value) / 50.0, 1.0)  # 최근 14일 누적강우 50mm 이상이면 최대치로 취급(초기 가정치)
     if factor == "last_inspection_days_ago":
         return min(float(value) / 180.0, 1.0)
     if factor == "adjacent_to_water":

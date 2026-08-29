@@ -24,7 +24,8 @@ from module_agg.run import run as agg_run
 from module_chg.run import run as chg_run
 from module_obs.run import run as obs_run
 from module_risk.run import run as risk_run
-from common.geo import geometry_5179_to_4326
+from common.geo import geometry_5179_to_4326, point_5179_to_4326
+from common.weather import fetch_recent_rainfall_mm
 
 BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
 CURRENT_PERIOD = ["2026-06-01", "2026-08-25"]
@@ -58,13 +59,18 @@ def main() -> None:
             }
         )
 
+        centroid_5179 = row.geometry.centroid
+        lon, lat = point_5179_to_4326(centroid_5179.x, centroid_5179.y)
+        recent_rainfall_mm = fetch_recent_rainfall_mm(lat, lon, as_of_date=CURRENT_PERIOD[1])
+
         agg_result = agg_run(
             {
                 "site_id": site_id,
                 "pnu": row.pnu,
                 "chg_results": [chg_result["data"]],
-                # site_attributes: KECI 내부 자산 DB 접근 불가(§ Module AGG 구현 상태 참조) — 전부 None
-                "site_attributes": {},
+                # site_attributes: KECI 내부 자산 DB 접근 불가(§ Module AGG 구현 상태 참조) — recent_rainfall_mm만
+                # 공개 데이터(Open-Meteo)로 채울 수 있고 나머지는 여전히 None.
+                "site_attributes": {"recent_rainfall_mm": recent_rainfall_mm},
             }
         )
 
@@ -86,6 +92,8 @@ def main() -> None:
                 "risk_tier": risk_result["data"]["risk_tier"],
                 "anomaly_score": chg_result["data"].get("anomaly_score"),
                 "change_type_hint": chg_result["data"].get("change_type_hint"),
+                "sar_vv_delta": chg_result["data"].get("sar_vv_delta"),
+                "recent_rainfall_mm": recent_rainfall_mm,
                 "chg_status": chg_result["status"],
                 "contributing_factors_json": json.dumps(risk_result["data"]["contributing_factors"], ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_obs["data"].get("scenes", []), ensure_ascii=False),

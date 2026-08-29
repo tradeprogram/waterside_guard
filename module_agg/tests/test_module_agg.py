@@ -12,12 +12,13 @@ def test_full_input_aggregates_cleanly():
         {
             "site_id": "A1037",
             "pnu": "4146110500100780003",
-            "chg_results": [{"anomaly_score": 0.72, "changed_area_ratio": 0.18}],
+            "chg_results": [{"anomaly_score": 0.72, "changed_area_ratio": 0.18, "sar_anomaly": 0.4}],
             "site_attributes": {
                 "restoration_elapsed_days": 420,
                 "last_inspection_days_ago": 63,
                 "adjacent_to_water": True,
                 "past_anomaly_count": 1,
+                "recent_rainfall_mm": 20.0,
             },
         }
     )
@@ -27,10 +28,12 @@ def test_full_input_aggregates_cleanly():
     assert result["data"]["features"] == {
         "anomaly_score_mean": 0.72,
         "changed_area_ratio": 0.18,
+        "sar_anomaly_mean": 0.4,
         "adjacent_to_water": True,
         "restoration_elapsed_days": 420,
         "last_inspection_days_ago": 63,
         "past_anomaly_count": 1,
+        "recent_rainfall_mm": 20.0,
     }
 
 

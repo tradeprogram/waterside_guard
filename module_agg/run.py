@@ -19,6 +19,7 @@ SITE_ATTRIBUTE_KEYS = (
     "restoration_elapsed_days",
     "last_inspection_days_ago",
     "past_anomaly_count",
+    "recent_rainfall_mm",  # 2026-08-30: common/weather.py(Open-Meteo) — "최근 기상" 요인, §Module RISK
 )
 
 
@@ -32,6 +33,7 @@ def run(input: dict) -> dict:
 
     anomaly_scores = [r.get("anomaly_score") for r in chg_results if r.get("anomaly_score") is not None]
     changed_ratios = [r.get("changed_area_ratio") for r in chg_results if r.get("changed_area_ratio") is not None]
+    sar_anomalies = [r.get("sar_anomaly") for r in chg_results if r.get("sar_anomaly") is not None]
 
     warnings: list[str] = []
     if not anomaly_scores:
@@ -46,10 +48,12 @@ def run(input: dict) -> dict:
     features = {
         "anomaly_score_mean": round(statistics.fmean(anomaly_scores), 4) if anomaly_scores else None,
         "changed_area_ratio": round(statistics.fmean(changed_ratios), 4) if changed_ratios else None,
+        "sar_anomaly_mean": round(statistics.fmean(sar_anomalies), 4) if sar_anomalies else None,
         "adjacent_to_water": site_attributes.get("adjacent_to_water"),
         "restoration_elapsed_days": site_attributes.get("restoration_elapsed_days"),
         "last_inspection_days_ago": site_attributes.get("last_inspection_days_ago"),
         "past_anomaly_count": site_attributes.get("past_anomaly_count"),
+        "recent_rainfall_mm": site_attributes.get("recent_rainfall_mm"),
     }
 
     status = "ok" if not warnings else "degraded"

@@ -8,6 +8,16 @@ MVP 범위 제한 — `changed_area_ratio`는 아직 픽셀 단위 변화면적�
 scene 평균 지표의 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서
 Earth Engine `reduceRegion` histogram 기반 픽셀 diff로 교체 예정). 이 근사를
 code에 명시해 과장하지 않는다.
+
+2026-08-30: Sentinel-1 SAR(`sar_vv_mean`, Module OBS가 제공)를 두 번째
+독립 신호로 추가했다. 원 리서치(수상전략 리포트)의 "기술적 해자 1번:
+Multisensor Fusion" 및 Top1 개념의 "핵심 기술: S1/S2 변화탐지"가 처음부터
+요구한 신호인데 최초 구현에서 광학(NDVI/NDMI)만 넣고 빠뜨렸던 것을 보완한다.
+**범위 제한**: SAR backscatter 변화로 "무엇이 바뀌었는지"(식생/토양/구조물)를
+판독하지 않는다 — 그건 SCL 이상으로 도메인 지식이 필요한 해석이다(§ 리서치
+"매우 중요한 범위 제한" 참조). 여기서는 딱 두 가지 역할만 준다: (1) 광학
+관측이 아예 없을 때(구름) 대체 이상도 신호, (2) 광학 이상도와 나란히 보여주는
+보조 근거(§ Evidence 표시용) — 판정 자체는 여전히 NDVI/NDMI 기준이다.
 """
 from __future__ import annotations
 
@@ -18,6 +28,7 @@ from common.geo import geometry_5179_to_4326
 from module_obs.run import run as obs_run
 
 ANOMALY_THRESHOLD_FOR_CHANGE = 0.15  # |z-score 정규화 편차|가 이 값 이상이면 "유의미한 변화"로 본다(초기 가정치)
+SAR_VV_DELTA_NORMALIZATION_DB = 3.0  # |VV backscatter 변화|(dB)가 이 값이면 이상도 1.0으로 정규화(초기 가정치)
 
 
 def _mean(values: list[float | None]) -> float | None:
@@ -42,15 +53,48 @@ def _classify_change(ndvi_delta: float | None, ndmi_delta: float | None) -> str:
     return "bare_ground_increase"
 
 
-def compute_change_from_scenes(baseline_scenes: list[dict], current_scenes: list[dict]) -> dict | None:
-    """순수 함수 — Module OBS가 이미 반환한 scene 리스트만으로 anomaly_score 등을 계산한다.
-    OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이 이 함수를
-    공유해서 분류 임계치·정규화 상수가 두 곳에서 따로 놀지 않게 한다.
-
-    scene이 하나라도 비어 있으면 계산할 수 없으므로 None을 반환한다.
-    """
-    if not baseline_scenes or not current_scenes:
+def _sar_anomaly(sar_vv_delta: float | None) -> float | None:
+    if sar_vv_delta is None:
         return None
+    return round(min(abs(sar_vv_delta) / SAR_VV_DELTA_NORMALIZATION_DB, 1.0), 3)
+
+
+def compute_change_from_scenes(
+    baseline_scenes: list[dict],
+    current_scenes: list[dict],
+    baseline_sar_vv_mean: float | None = None,
+    current_sar_vv_mean: float | None = None,
+) -> dict | None:
+    """순수 함수 — Module OBS가 이미 반환한 scene 리스트(+SAR 평균)만으로 anomaly_score
+    등을 계산한다. OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이
+    이 함수를 공유해서 분류 임계치·정규화 상수가 두 곳에서 따로 놀지 않게 한다.
+
+    광학(NDVI/NDMI) scene이 둘 다 있으면 그것을 판정 기준으로 쓰고, SAR는 근거로만
+    같이 반환한다. 광학 scene이 하나라도 없는데 SAR 평균은 둘 다 있으면(구름으로 광학이
+    전멸한 경우) SAR만으로 이상도를 근사한다 — 그래서 다른 신호들과 달리, scene이
+    비어 있어도 SAR만 있으면 None을 반환하지 않는다(§ 모듈 docstring 2026-08-30).
+    """
+    has_optical = bool(baseline_scenes) and bool(current_scenes)
+
+    sar_vv_delta = (
+        (current_sar_vv_mean - baseline_sar_vv_mean)
+        if (current_sar_vv_mean is not None and baseline_sar_vv_mean is not None)
+        else None
+    )
+    sar_anomaly = _sar_anomaly(sar_vv_delta)
+
+    if not has_optical:
+        if sar_anomaly is None:
+            return None
+        return {
+            "anomaly_score": sar_anomaly,
+            "changed_area_ratio": sar_anomaly,
+            "change_type_hint": "possible_change_sar_only",
+            "source": "observed_sar_fallback",
+            "confidence_interval": None,
+            "sar_vv_delta": round(sar_vv_delta, 3),
+            "sar_anomaly": sar_anomaly,
+        }
 
     baseline_ndvi = _mean([s["indices"].get("ndvi_mean") for s in baseline_scenes])
     baseline_ndmi = _mean([s["indices"].get("ndmi_mean") for s in baseline_scenes])
@@ -76,6 +120,8 @@ def compute_change_from_scenes(baseline_scenes: list[dict], current_scenes: list
         "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
         "source": "observed",
         "confidence_interval": ci,
+        "sar_vv_delta": round(sar_vv_delta, 3) if sar_vv_delta is not None else None,
+        "sar_anomaly": sar_anomaly,
     }
 
 
@@ -111,7 +157,12 @@ def run(input: dict) -> dict:
     baseline_scenes = baseline_obs["data"].get("scenes", [])
     current_scenes = current_obs["data"].get("scenes", [])
 
-    computed = compute_change_from_scenes(baseline_scenes, current_scenes)
+    computed = compute_change_from_scenes(
+        baseline_scenes,
+        current_scenes,
+        baseline_sar_vv_mean=baseline_obs["data"].get("sar_vv_mean"),
+        current_sar_vv_mean=current_obs["data"].get("sar_vv_mean"),
+    )
     if computed is None:
         warnings.append(f"[{aoi_id}] 기준기간 또는 현재기간에 유효 관측이 없어 변화탐지를 건너뜁니다.")
         return make_envelope(
@@ -122,6 +173,8 @@ def run(input: dict) -> dict:
                 "change_type_hint": "no_significant_change",
                 "source": "observed",
                 "confidence_interval": None,
+                "sar_vv_delta": None,
+                "sar_anomaly": None,
             },
             status="degraded",
             fallback_tier=2,

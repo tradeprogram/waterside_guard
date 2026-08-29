@@ -10,6 +10,13 @@ Space Ecosystem 대안도 검토했으나 GEE로 확정). 자격증명(GEE_PROJE
 등)이 없거나 초기화에 실패하면 예외를 던지지 않고 degraded envelope을
 반환한다 — ARCHITECTURE.md §0.5 "AI가 실패해도 서비스가 작동하는 설계"
 원칙을 코드로 강제하는 지점.
+
+2026-08-30: `COPERNICUS/S1_GRD`(Sentinel-1 SAR) VV backscatter 평균을
+`sar_vv_mean`으로 추가했다 — 원 리서치(수상전략 리포트 §Top1 "핵심 기술:
+S1/S2 변화탐지")가 처음부터 요구한 신호인데 구현에서 빠져 있었다. SAR는
+구름·주야와 무관하게 관측되므로, Sentinel-2 scenes가 전부 비어도(장마철
+등) 이 값만은 있을 수 있다 — 그래서 scenes 조회와 완전히 독립적으로 시도한다
+(한쪽이 실패해도 다른 쪽은 살아남는다, §0.5와 같은 원칙).
 """
 from __future__ import annotations
 
@@ -126,6 +133,31 @@ def _fetch_ee_timeseries(geometry_4326: dict, date_range: list[str]) -> list[dic
     return scenes
 
 
+def _fetch_sar_vv_mean(geometry_4326: dict, date_range: list[str]) -> float | None:
+    """AOI 위 Sentinel-1 IW/VV backscatter의 기간 평균(dB). 구름·주야 무관 all-weather
+    관측이라 NDVI처럼 장면 단위로 채택/기각하지 않고, 기간 내 전체를 합성(mean composite)한
+    뒤 한 번만 reduceRegion한다 — Sentinel-2 시계열보다 훨씬 가볍다."""
+    import ee
+
+    geom = ee.Geometry(geometry_4326)
+    collection = (
+        ee.ImageCollection("COPERNICUS/S1_GRD")
+        .filterBounds(geom)
+        .filterDate(date_range[0], date_range[1])
+        .filter(ee.Filter.eq("instrumentMode", "IW"))
+        .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+        .select("VV")
+    )
+    if collection.size().getInfo() == 0:
+        return None
+
+    stats = collection.mean().reduceRegion(
+        reducer=ee.Reducer.mean(), geometry=geom, scale=REDUCE_SCALE_M, maxPixels=1_000_000_000, bestEffort=True
+    )
+    value = stats.get("VV").getInfo()
+    return round(value, 3) if value is not None else None
+
+
 def run(input: dict) -> dict:
     aoi_id = input.get("aoi_id", "unknown")
     date_range = input.get("date_range")
@@ -140,27 +172,39 @@ def run(input: dict) -> dict:
     init_error = _init_ee()
     if init_error:
         return make_envelope(
-            {"aoi_id": aoi_id, "scenes": [], "composite_ref": None},
+            {"aoi_id": aoi_id, "scenes": [], "composite_ref": None, "sar_vv_mean": None},
             status="degraded",
             fallback_tier=3,
             warnings=[init_error],
         )
 
+    warnings: list[str] = []
     try:
         scenes = _fetch_ee_timeseries(geometry_4326, date_range)
     except Exception as e:  # noqa: BLE001 — 모듈 경계에서는 모든 예외를 degraded로 흡수한다 (ARCHITECTURE.md §4.2)
-        return error_envelope(f"[{aoi_id}] Earth Engine 조회 실패: {e}", fallback_tier=2)
+        scenes = []
+        warnings.append(f"[{aoi_id}] Sentinel-2 조회 실패: {e}")
 
-    if not scenes:
+    # SAR는 scenes 성공 여부와 무관하게 시도한다 — 구름 때문에 광학 관측이 전멸해도
+    # 레이더는 살아있을 수 있다는 게 이 신호를 추가한 이유 그 자체다.
+    sar_vv_mean: float | None = None
+    try:
+        sar_vv_mean = _fetch_sar_vv_mean(geometry_4326, date_range)
+    except Exception as e:  # noqa: BLE001
+        warnings.append(f"[{aoi_id}] Sentinel-1 SAR 조회 실패: {e}")
+
+    if not scenes and sar_vv_mean is None:
+        warnings.append(f"[{aoi_id}] {date_range} 구간에 유효한 관측이 없습니다(구름 등).")
         return make_envelope(
-            {"aoi_id": aoi_id, "scenes": [], "composite_ref": None},
+            {"aoi_id": aoi_id, "scenes": [], "composite_ref": None, "sar_vv_mean": None},
             status="degraded",
             fallback_tier=2,
-            warnings=[f"[{aoi_id}] {date_range} 구간에 유효한 장면이 없습니다(구름 등)."],
+            warnings=warnings,
         )
 
     return make_envelope(
-        {"aoi_id": aoi_id, "scenes": scenes, "composite_ref": None},
-        status="ok",
-        fallback_tier=1,
+        {"aoi_id": aoi_id, "scenes": scenes, "composite_ref": None, "sar_vv_mean": sar_vv_mean},
+        status="ok" if scenes else "degraded",
+        fallback_tier=1 if scenes else 2,
+        warnings=warnings,
     )

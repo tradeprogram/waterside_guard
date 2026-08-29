@@ -83,6 +83,90 @@ def _fetch_batch_timeseries(sites: list[dict], date_range: list[str]) -> dict[st
     return results
 
 
+def _fetch_batch_sar_vv_mean(sites: list[dict], date_range: list[str]) -> dict[str, float | None]:
+    """`run.py`의 `_fetch_sar_vv_mean`을 여러 site에 대해 한 번에 처리하는 배치 버전.
+    기간 전체를 mean composite 하나로 합성한 뒤 site들을 한 번의 `reduceRegions`로
+    처리하므로, `_fetch_batch_timeseries`처럼 이미지 수만큼 반복할 필요조차 없다
+    (Sentinel-2 시계열보다도 가볍다)."""
+    import ee
+
+    features = [ee.Feature(ee.Geometry(s["geometry_4326"]), {"site_id": s["site_id"]}) for s in sites]
+    fc = ee.FeatureCollection(features)
+
+    collection = (
+        ee.ImageCollection("COPERNICUS/S1_GRD")
+        .filterBounds(fc.geometry())
+        .filterDate(date_range[0], date_range[1])
+        .filter(ee.Filter.eq("instrumentMode", "IW"))
+        .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+        .select("VV")
+    )
+
+    results: dict[str, float | None] = {s["site_id"]: None for s in sites}
+    if collection.size().getInfo() == 0:
+        return results
+
+    # 밴드가 하나뿐인 이미지를 reduceRegions하면 출력 컬럼명이 밴드명("VV")이 아니라
+    # reducer 기본 출력명인 "mean"이 된다(다중 밴드였던 S2 배치 조회와 다른 부분 —
+    # 실측으로 확인, 2026-08-30: 처음엔 "VV"로 읽어서 전부 None이 나왔었다).
+    reduced = collection.mean().reduceRegions(collection=fc, reducer=ee.Reducer.mean(), scale=REDUCE_SCALE_M)
+    for feat in reduced.getInfo()["features"]:
+        props = feat["properties"]
+        site_id = props.get("site_id")
+        vv_mean = props.get("mean")
+        if site_id in results and vv_mean is not None:
+            results[site_id] = round(vv_mean, 3)
+    return results
+
+
+def run_batch_sar(input: dict) -> dict:
+    """input: {"sites": [{"site_id": str, "geometry_4326": GeoJSON geometry}], "date_range": [start, end]}
+    output(data): {"sar_vv_mean_by_site": {site_id: float | None}}
+
+    `run_batch`(Sentinel-2)과 완전히 독립된 진입점이다 — 구름으로 광학 관측이
+    전멸해도 SAR는 살아있을 수 있다는 게 이 신호의 존재 이유라서, 실패를 같이
+    묶으면 안 된다.
+    """
+    sites = input.get("sites")
+    date_range = input.get("date_range")
+
+    if not sites or not date_range:
+        return error_envelope("sites/date_range가 필요합니다.", fallback_tier=3)
+
+    init_error = _init_ee()
+    if init_error:
+        return make_envelope(
+            {"sar_vv_mean_by_site": {s["site_id"]: None for s in sites}},
+            status="degraded",
+            fallback_tier=3,
+            warnings=[init_error],
+        )
+
+    try:
+        sar_vv_mean_by_site = _fetch_batch_sar_vv_mean(sites, date_range)
+    except Exception as e:  # noqa: BLE001 — 모듈 경계에서는 모든 예외를 degraded로 흡수(§4.2)
+        return make_envelope(
+            {"sar_vv_mean_by_site": {s["site_id"]: None for s in sites}},
+            status="degraded",
+            fallback_tier=2,
+            warnings=[f"Sentinel-1 SAR 배치 조회 실패: {e}"],
+        )
+
+    empty_sites = [sid for sid, v in sar_vv_mean_by_site.items() if v is None]
+    warnings = (
+        [f"{len(empty_sites)}개 site에 SAR 관측 없음: {empty_sites[:5]}{'...' if len(empty_sites) > 5 else ''}"]
+        if empty_sites
+        else []
+    )
+
+    return make_envelope(
+        {"sar_vv_mean_by_site": sar_vv_mean_by_site},
+        status="ok" if not warnings else "degraded",
+        fallback_tier=1 if not warnings else 2,
+        warnings=warnings,
+    )
+
+
 def run_batch(input: dict) -> dict:
     """input: {"sites": [{"site_id": str, "geometry_4326": GeoJSON geometry}], "date_range": [start, end]}
     output(data): {"scenes_by_site": {site_id: [scene, ...]}}
