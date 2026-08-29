@@ -230,7 +230,8 @@ cd ui && npm install && npm run dev
 | 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
 | 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
 | 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
-| 9/23–9/27 | **Module VERIFY·AGENT 전부 완료** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. Gemini 기반 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`), `GEMINI_API_KEY` 확보 후 실제 응답 검증 대기 |
+| 9/23–9/27 | **Module VERIFY·AGENT 전부 완료 + 실증 끝** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. `gemini-3.6-flash`로 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`) 실제 응답 확인 |
+| — | **8개 모듈(OBS/CHG/AGG/RISK/O/FIELD/VERIFY/AGENT) + API 서버 + UI 전부 완료·실증** — GEE·Gemini 둘 다 실제 API 키로 검증. 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
 | 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
 
 전체 로드맵과 각 마일스톤의 완료 기준은 [ARCHITECTURE.md §12](ARCHITECTURE.md#12-개발-로드맵).

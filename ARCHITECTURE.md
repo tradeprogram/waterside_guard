@@ -430,7 +430,9 @@ Evidence Agent
 
 폴백은 §4.3 참조.
 
-**구현 상태(2026-08-29)**: `module_agent/`(Gemini function calling, 모델은 `GEMINI_MODEL` 환경변수로 지정 — 기본값 `gemini-3.6-flash`). `run.py`는 위 다이어그램의 Risk Result Tool/Time-Series Query Tool/Field Inspection DB 세 개를 구현했다(GIS Query Tool은 별도 지리 조회가 필요 없어 생략 — site 속성은 이미 Risk Result Tool에 포함). **중요한 설계**: tool 함수는 `site_id`를 인자로 받지 않는다 — API가 요청의 `site_id`에 고정된 클로저를 매번 새로 만들어 모델에 넘긴다. 모델이 엉뚱한 site_id를 지어내 다른 대상지 정보를 조회하는 경로 자체를 차단하기 위해서다. `report.py`가 Report Generator를 구현(§7 `POST /reports/weekly`). `GEMINI_API_KEY`가 없거나 API 호출이 실패하면 예외 대신 템플릿 폴백(§4.3)으로 전환 — `pytest module_agent/tests/ -v` 13개가 전부 mock으로 통과하며, 실제 Gemini 키로는 아직 검증되지 않음.
+**구현 상태(2026-08-29)**: `module_agent/`(Gemini function calling, 모델은 `GEMINI_MODEL` 환경변수로 지정 — 기본값 `gemini-3.6-flash`). `run.py`는 위 다이어그램의 Risk Result Tool/Time-Series Query Tool/Field Inspection DB 세 개를 구현했다(GIS Query Tool은 별도 지리 조회가 필요 없어 생략 — site 속성은 이미 Risk Result Tool에 포함). **중요한 설계**: tool 함수는 `site_id`를 인자로 받지 않는다 — API가 요청의 `site_id`에 고정된 클로저를 매번 새로 만들어 모델에 넘긴다. 모델이 엉뚱한 site_id를 지어내 다른 대상지 정보를 조회하는 경로 자체를 차단하기 위해서다. `report.py`가 Report Generator를 구현(§7 `POST /reports/weekly`). `GEMINI_API_KEY`가 없거나 API 호출이 실패하면 예외 대신 템플릿 폴백(§4.3)으로 전환 — `pytest module_agent/tests/ -v` 13개가 전부 mock으로 통과.
+
+**실제 Gemini로 실증 완료(2026-08-29)**: `gemini-3.6-flash` 모델로 Q&A·주간보고서 둘 다 실제 호출해 확인. 예시 응답: "해당 대상지(A1037)는 위험 점수 54점으로 2순위 관리 대상에 포함되었습니다. 주요 근거 요인으로는 평균 이상 점수가 0.72로 높게 측정되었으며..." — `tools_used: ["get_risk_evidence"]`로 실제 tool 호출이 확인되고, 답변이 tool이 반환한 숫자(54, 2순위, 0.72)를 정확히 인용함(지어낸 숫자 없음). 알려진 사소한 이슈: SDK가 `Models.generate_content`에서의 automatic function calling 사용에 대해 "`Chat.send_message`를 대신 쓰라"는 안내성 경고를 콘솔에 출력한다 — 기능에는 영향 없음, 필요시 §12 B급 확장에서 Chat 기반으로 리팩터링 가능.
 
 ---
 
@@ -562,7 +564,7 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 | 9/15–9/18 | Module RISK(ML, 선택) | LightGBM은 label 충분할 때만 추가 |
 | 9/19–9/22 | **Module O + FIELD + API 서버 + UI 전부 완료**(2026-08-29 조기 착수) | `api_server.py`(FastAPI, 6개 엔드포인트), `ui/`(Next.js+MapLibre) — 지도 클릭→Evidence Card→현장점검 등록→큐 갱신까지 브라우저에서 end-to-end 확인 |
 | 9/23–9/25 | **Module VERIFY 완료**(2026-08-29 조기 착수) — Precision@K·Recall@Top20%·baseline 비교·leakage 가드, `GET /verify/backtest` 연결 | baseline 비교, Precision@K, Recall@K |
-| 9/26–9/27 | **Module AGENT 완료**(2026-08-29 조기 착수, Gemini function calling) — `GEMINI_API_KEY` 확보 후 실제 응답 검증 대기 | `/sites/{id}/ask`, `POST /reports/weekly`, 13개 테스트(mock) |
+| 9/26–9/27 | **Module AGENT 완료 + 실제 Gemini 검증까지 끝남**(2026-08-29 조기 착수) | `/sites/{id}/ask`, `POST /reports/weekly`, `gemini-3.6-flash`로 실제 응답 확인 |
 | 9/28 | Red-Team | §11.3 공격 방어 리허설 |
 | 9/29 | 제출본 Lock | 문장·도표·수치·인용 최종 검증 |
 | 9/30 이전 | 제출 | 마감 당일이 아니라 전날 제출 권장 |
@@ -577,7 +579,7 @@ POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGEN
 
 이 프로젝트는 Aquaguard처럼 여러 세션이 병렬로 작업하는 구조가 **아니다** — 사용자 1인 + Claude Code 세션이 순차적으로 §12 로드맵을 따라간다. 그래서 `contracts/` 폴더에 별도 JSON Schema 파일을 만들지 않았다 — 이 문서 §5의 예시 JSON이 유일한 소스 오브 트루스다. 새 모듈을 만들 때는 이 문서 §5를 먼저 갱신하고 코드를 짜라.
 
-**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP부터 8개 모듈(OBS/CHG/AGG/RISK/O/FIELD/VERIFY/AGENT) + API 서버 + UI까지 2026-08-29에 전부 조기 완료됐다 — 남은 건 **Module AGENT의 실제 Gemini 키 검증**(현재는 mock 테스트만 통과, §5 구현 상태 참조)과 §11.3 Red-Team 리허설·제출 준비뿐이다.
+**지금 무엇을 먼저 해야 하는지 헷갈리면**: §12 로드맵 표에서 오늘 날짜가 속한 구간을 찾아라. Data MVP부터 8개 모듈(OBS/CHG/AGG/RISK/O/FIELD/VERIFY/AGENT) + API 서버 + UI까지 2026-08-29에 전부 조기 완료·실증됐다(Gemini·GEE 둘 다 실제 키로 검증 완료). 남은 건 **§11.3 Red-Team 리허설과 제출 준비**뿐이다 — 새 기능이 아니라 6,275건 전체로 배치 확장(§12 B급), 공식 붙임1 심사표 재확인(§12 8/29~8/31 항목), 제안서 작성 쪽으로 넘어갈 것.
 
 **막히면**: `data/raw/`의 CSV·`.env`의 `VWORLD_API_KEY`/`GEE_PROJECT_ID`는 이미 배치·검증돼 있다(2026-08-29). 전체 파이프라인을 재검증하려면 저장소 루트에서 `python -m pytest -v`(`conftest.py`가 `.env`를 자동 로드하므로 라이브 GEE 테스트까지 함께 돈다). end-to-end 데모를 다시 돌리려면 `PYTHONPATH=. python scripts/run_priority_queue_demo.py --limit N`. 서버·UI를 띄우려면 `python -m uvicorn api_server:app --port 8001`(백엔드) 후 `cd ui && npm run dev`(프론트) — `ui/lib/api.ts`의 `NEXT_PUBLIC_API_BASE` 기본값이 `http://localhost:8001`.
 
