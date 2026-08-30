@@ -208,18 +208,32 @@ API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채
 Precision@K 함수가 테스트를 통과한다는 건 *계산 코드가 맞다*는 뜻이지 *실제 탐지
 정확도가 높다*는 뜻이 아니다. 아래 3단계로 정답지를 만든다:
 
+**현장에 갈 필요 없다.** 리서치가 권장한 주력 방법(Silver-A)은 현장 방문이 아니라
+**고해상도 위성영상 판독**이다. 아래 3단계로 진행한다:
+
 ```bash
-# 1) 판독 후보 추출 — 점수 구간별 층화추출 + Before/After 위성 이미지 URL 포함
+# 1) 판독 자료 생성 — 층화추출 + Esri Wayback 시기별 실사 영상(필지 경계 표시)
 python scripts/build_label_candidates.py --n 60
 
-# 2) data/labels/label_candidates.csv 를 열어 사람이 판독
-#    verdict(yes/no/uncertain) · change_type · reviewer · reviewed_at 을 채운다
+# 2) data/labels/review/index.html 을 브라우저로 열어 판독
+#    필지별로 4개 시기 영상이 나란히 뜨고, 판정/변화유형을 고른 뒤 CSV로 내려받는다
 #    → 가능하면 2명이 독립 판독하고 불일치 건만 재검토
 
-# 3) 판독 결과를 시스템에 반영
+# 3) 판독 결과를 label_candidates.csv 에 옮긴 뒤 시스템에 반영
 python scripts/import_labels.py --dry-run   # 검증만
 python scripts/import_labels.py             # 저장 → api_server 재시작 시 Backtest가 채점
 ```
+
+**왜 NDVI가 아니라 Esri Wayback 실사 영상인가**: (1) NDVI로 판독하면 알고리즘이 쓴 신호를
+사람이 다시 확인하는 **순환논리**가 된다. (2) Sentinel-2는 10m/픽셀인데 필지 중앙값이
+883㎡(약 3×3 픽셀), 최소 4㎡라 **육안 판독이 물리적으로 불가능**하다. Wayback은 서브미터급
+실사 영상을 시기별로 제공해 두 문제를 동시에 해결한다.
+
+**계절 차이 함정에 대한 대응**: Wayback의 날짜는 배포일이지 촬영일이 아니어서(Esri가 촬영일을
+공개하지 않는다) 어떤 시기는 여름, 어떤 시기는 휴면기 영상이다. 그래서 판독 지침을
+**"구조적 변화만 판정하고, 초록↔갈색 차이는 `natural_seasonal`(오탐)로 기록"**으로 못박았다.
+이건 타협이 아니라 오히려 더 나은 정답지다 — 우리 모델의 알려진 약점이 계절 오탐인데,
+사람이 "이건 계절 변화일 뿐"이라고 표시해주면 그 오탐이 Precision@K에 그대로 잡힌다.
 
 **왜 층화추출인가**: 점수 상위만 라벨링하면 Precision@K는 재도 **Recall은 못 잰다**(하위
 구간에 실제 변화가 얼마나 숨어 있는지 모르므로). 상위·중위·하위에서 고루 뽑아야
