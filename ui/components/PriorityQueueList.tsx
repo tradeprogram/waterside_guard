@@ -2,14 +2,31 @@
 
 import type { PriorityQueueEntry, Site } from "@/lib/api";
 
+// 등급별 색 — globals.css의 --tier-* 와 같은 값이어야 한다. 브랜드 청록으로 물들이지 않는다:
+// 1순위와 3순위가 비슷해 보이는 순간 목록으로서 기능을 잃는다.
+const TIER_COLOR: Record<string, string> = {
+  "1순위": "var(--tier-1)",
+  "2순위": "var(--tier-2)",
+  "3순위": "var(--tier-3)",
+  정상: "var(--tier-normal)",
+};
+
 // addr(예: "경기도 여주시 대신면 양촌리 369-5")에서 "시군구 읍면동"만 뽑아 그룹 키로 쓴다.
 // PNU 기반 주소는 항상 [시/도, 시/군/구, 읍/면/동, 리, 지번] 순서라 토큰 인덱스로 충분하고,
 // 별도의 행정동 경계 shapefile 조인 없이도 그룹핑이 가능하다.
 function parseDong(addr?: string): string {
-  if (!addr) return "미분류";
+  if (!addr) return "주소 미상";
   const tokens = addr.split(/\s+/);
   if (tokens.length < 3) return addr;
   return `${tokens[1]} ${tokens[2]}`;
+}
+
+// 그룹 제목이 "시군구 읍면동"이므로 항목에는 그 뒤(리·지번)만 남긴다 — 같은 정보를
+// 두 번 읽게 하지 않는다. 주소가 없으면 내부 식별자로 폴백한다.
+function parseJibun(addr: string | undefined, siteId: string): string {
+  if (!addr) return siteId.replace(/^(HANRIVER|YUBANG)_/, "");
+  const rest = addr.split(/\s+/).slice(3).join(" ");
+  return rest || addr;
 }
 
 export default function PriorityQueueList({
@@ -23,58 +40,78 @@ export default function PriorityQueueList({
   sites: Site[];
   selectedSiteId: string | null;
   onSelectSite: (siteId: string) => void;
-  /** 이번 주 점검 가능 건수 — 이 순위를 넘어가는 항목은 흐리게 표시한다(§InspectionBudgetPanel). */
+  /** 주간 배정 필지 수 — 이 순위를 넘어가는 항목은 흐리게 표시한다(§InspectionBudgetPanel). */
   budget?: number;
 }) {
-  const addrBySiteId = new Map(sites.map((s) => [s.site_id, s.addr]));
+  const siteById = new Map(sites.map((s) => [s.site_id, s]));
 
   // entries는 이미 순위(rank)순으로 정렬돼 있으므로, Map의 삽입 순서를 그대로 쓰면
-  // "가장 급한 대상지가 속한 동"이 자연히 맨 위 그룹으로 온다 — 별도 그룹 정렬 불필요.
+  // 최우선 필지가 속한 읍면동이 자연히 맨 위 그룹으로 온다 — 별도 그룹 정렬 불필요.
   const groups = new Map<string, PriorityQueueEntry[]>();
   for (const e of entries) {
-    const key = parseDong(addrBySiteId.get(e.site_id));
+    const key = parseDong(siteById.get(e.site_id)?.addr);
     const list = groups.get(key);
     if (list) list.push(e);
     else groups.set(key, [e]);
   }
 
   return (
-    <div className="flex flex-col gap-3 overflow-y-auto">
+    <div className="flex flex-col gap-3">
       {[...groups.entries()].map(([dong, group]) => (
         <div key={dong}>
-          <div className="sticky top-0 z-10 mb-1 flex items-center justify-between bg-white px-3 py-1 text-xs font-semibold text-neutral-500">
+          <div
+            className="sticky top-0 z-10 mb-1 flex items-center justify-between rounded px-2 py-1.5 text-[11px] font-bold"
+            style={{ background: "var(--surface-glass-strong)", backdropFilter: "var(--glass-blur)", color: "var(--ink-2)" }}
+          >
             <span>{dong}</span>
-            <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] tabular-nums">
-              {group.length}
+            <span className="rounded-full bg-black/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-ink-3">
+              {group.length}필지
             </span>
           </div>
+
           <div className="flex flex-col gap-1">
-            {group.map((e) => (
-              <button
-                key={e.site_id}
-                onClick={() => onSelectSite(e.site_id)}
-                className={`flex items-center justify-between rounded px-3 py-2 text-left text-sm transition ${
-                  e.site_id === selectedSiteId
-                    ? "bg-neutral-800 text-white"
-                    : "bg-neutral-100 hover:bg-neutral-200 text-neutral-900"
-                } ${budget != null && e.rank > budget ? "opacity-45" : ""}`}
-              >
-                <span className="flex items-center gap-2">
-                  <span className="w-6 shrink-0 text-xs font-semibold opacity-70">#{e.rank}</span>
-                  <span className="truncate font-mono text-xs">{e.site_id.replace("YUBANG_", "")}</span>
-                </span>
-                <span className="flex items-center gap-2 shrink-0">
+            {group.map((e) => {
+              const site = siteById.get(e.site_id);
+              const selected = e.site_id === selectedSiteId;
+              const tier = site?.priority_tier ?? null;
+              const outOfBudget = budget != null && e.rank > budget;
+
+              return (
+                <button
+                  key={e.site_id}
+                  onClick={() => onSelectSite(e.site_id)}
+                  aria-current={selected ? "true" : undefined}
+                  className={`group flex items-center gap-2 rounded-md py-1.5 pl-0 pr-2 text-left transition ${
+                    selected ? "text-white shadow-sm" : "text-ink hover:bg-black/[0.045]"
+                  } ${outOfBudget ? "opacity-45" : ""}`}
+                  style={selected ? { background: "linear-gradient(135deg, var(--brand), var(--brand-2))" } : undefined}
+                >
+                  {/* 등급 색 띠 — 선택 상태에서도 등급이 사라지지 않도록 항상 왼쪽에 둔다 */}
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      e.status === "점검완료" ? "bg-green-200 text-green-900" : "bg-amber-200 text-amber-900"
-                    }`}
+                    className="h-8 w-1 shrink-0 rounded-r"
+                    style={{ background: tier ? TIER_COLOR[tier] ?? "var(--ink-3)" : "var(--line-strong)" }}
+                    aria-hidden
+                  />
+                  <span
+                    className={`w-6 shrink-0 text-right text-[11px] font-semibold ${selected ? "text-white/75" : "text-ink-3"}`}
                   >
-                    {e.status}
+                    {e.rank}
                   </span>
-                  <span className="font-semibold tabular-nums">{e.inspection_priority_score ?? "–"}</span>
-                </span>
-              </button>
-            ))}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] leading-tight">
+                      {parseJibun(site?.addr, e.site_id)}
+                    </span>
+                    <span className={`text-[10px] leading-tight ${selected ? "text-white/70" : "text-ink-3"}`}>
+                      {tier ?? "등급 미산정"}
+                      {e.status === "점검완료" && " · 점검완료"}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 text-[15px] font-bold ${selected ? "text-white" : "text-ink"}`}>
+                    {e.inspection_priority_score ?? "–"}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}

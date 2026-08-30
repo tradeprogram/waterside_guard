@@ -42,7 +42,7 @@ export default function HighResHistory({ siteId }: { siteId: string }) {
     };
   }, [siteId]);
 
-  if (loading) return <p className="text-sm text-neutral-400">고해상도 영상 불러오는 중...</p>;
+  if (loading) return <p className="text-[13px] text-ink-3">고해상도 영상 조회 중</p>;
   if (failed || !data || data.epochs.length === 0) return null;
 
   const [west, north, east, south] = data.bounds;
@@ -59,10 +59,8 @@ export default function HighResHistory({ siteId }: { siteId: string }) {
 
   return (
     <div>
-      <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-        고해상도 실사 영상 (시기별)
-      </h3>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <h3 className="section-title mb-1.5">시기별 고해상도 항공·위성영상</h3>
+      <div className="scroll-thin flex gap-2 overflow-x-auto pb-1">
         {data.epochs.map((epoch) => (
           <figure key={epoch.date} className="m-0 shrink-0">
             <div className="relative" style={{ width: size, height: size }}>
@@ -80,17 +78,18 @@ export default function HighResHistory({ siteId }: { siteId: string }) {
               )}
               <svg className="absolute inset-0" width={size} height={size}>
                 {polygons.map((points, i) => (
-                  <polygon key={i} points={points} fill="none" stroke="#ff3b30" strokeWidth={2} />
+                  <polygon key={i} points={points} fill="none" stroke="var(--tier-1)" strokeWidth={2} />
                 ))}
               </svg>
             </div>
-            <figcaption className="mt-0.5 text-center text-xs text-neutral-500">{epoch.date}</figcaption>
+            <figcaption className="mt-1 text-center text-[11px] text-ink-3">{epoch.date}</figcaption>
           </figure>
         ))}
       </div>
-      <p className="mt-1 text-xs text-neutral-400">
-        빨간 테두리가 대상 필지입니다. 날짜는 Esri 배포일이라 시기마다 촬영 계절이 달라
-        초록/갈색 차이가 날 수 있습니다 — 건물·토공·나지화 같은 <strong>구조적 변화</strong>를 보세요.
+      <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
+        적색 경계가 대상 필지입니다. 표기된 날짜는 영상 배포일로, 시기별 촬영 계절이 달라 색조 차이가
+        발생할 수 있습니다. 건물·토공·나지화 등 <strong className="font-semibold">구조적 변화</strong>를 기준으로
+        판단하시기 바랍니다.
       </p>
     </div>
   );

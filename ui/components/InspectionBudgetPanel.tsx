@@ -6,11 +6,11 @@ import type { PriorityQueueEntry } from "@/lib/api";
 const PRESETS = [5, 10, 20];
 
 /**
- * "이번 주 N곳 점검 가능"을 설정하면 Top-N을 잘라 보여주고, 그게 전체의 몇 %인지를 알려준다.
+ * 주간 점검 가능 필지 수를 설정하면 상위 N필지를 배정하고, 그것이 전체의 몇 %인지 알려준다.
  *
  * 중간점검 리서치가 Operational Novelty의 핵심으로 꼽은 기능 — 구현 난이도는 낮은데
- * 정체성을 "지도 프로그램"에서 "제한된 자원을 배분하는 의사결정지원 시스템"으로 바꾼다.
- * 예상 발견율은 **실제 검증 데이터가 있을 때만** 표시한다(없으면 추측 숫자를 만들지 않는다, §9).
+ * 정체성을 단순 지도 조회 화면에서 제한된 점검 인력을 배분하는 의사결정 지원 도구로 바꾼다.
+ * 예상 확인율은 **실제 검증 데이터가 있을 때만** 표시한다(없으면 추측 숫자를 만들지 않는다, §9).
  */
 export default function InspectionBudgetPanel({
   entries,
@@ -30,29 +30,33 @@ export default function InspectionBudgetPanel({
   const uninspectedInBudget = entries.slice(0, budget).filter((e) => e.status === "미점검").length;
 
   return (
-    <div className="border-b border-neutral-200 bg-neutral-50 px-3 py-2">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="text-xs font-semibold text-neutral-600">이번 주 점검 가능</span>
-        <span className="text-xs text-neutral-500">
-          전체 {total}곳 중 <span className="font-semibold text-neutral-800">{coverage}%</span>
+    <div className="border-b border-line px-3 py-2.5" style={{ background: "var(--brand-soft)" }}>
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="section-title">주간 점검 배정</span>
+        <span className="text-[11px] text-ink-3">
+          전체 {total}필지 중 <strong className="font-semibold text-brand">{coverage}%</strong>
         </span>
       </div>
 
       <div className="flex gap-1">
-        {PRESETS.map((n) => (
-          <button
-            key={n}
-            onClick={() => {
-              setCustom("");
-              onBudgetChange(n);
-            }}
-            className={`flex-1 rounded px-2 py-1 text-xs transition ${
-              budget === n && custom === "" ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 hover:bg-neutral-200"
-            }`}
-          >
-            {n}곳
-          </button>
-        ))}
+        {PRESETS.map((n) => {
+          const active = budget === n && custom === "";
+          return (
+            <button
+              key={n}
+              onClick={() => {
+                setCustom("");
+                onBudgetChange(n);
+              }}
+              aria-pressed={active}
+              className={`pill flex-1 px-2 py-1.5 text-xs font-medium ${
+                active ? "pill-active" : "bg-white/70 text-ink-2 hover:bg-white"
+              }`}
+            >
+              {n}필지
+            </button>
+          );
+        })}
         <input
           type="number"
           min={1}
@@ -63,17 +67,18 @@ export default function InspectionBudgetPanel({
             const n = Number(e.target.value);
             if (n >= 1) onBudgetChange(Math.min(n, total));
           }}
-          placeholder="직접"
-          className="w-14 rounded border border-neutral-300 px-1.5 py-1 text-xs"
+          placeholder="직접입력"
+          aria-label="점검 가능 필지 수 직접 입력"
+          className="field w-[4.5rem] px-2 py-1 text-xs"
         />
       </div>
 
-      <p className="mt-1.5 text-xs text-neutral-500">
-        상위 {budget}곳 중 미점검 {uninspectedInBudget}곳
+      <p className="mt-2 text-[11px] text-ink-2">
+        배정 {budget}필지 중 미점검 <strong className="font-semibold">{uninspectedInBudget}</strong>필지
         {expectedRecall != null && (
           <>
-            {" · "}과거 검증 기준 예상 발견율{" "}
-            <span className="font-semibold text-neutral-800">{Math.round(expectedRecall * 100)}%</span>
+            {" · "}검증 이력 기준 예상 확인율{" "}
+            <strong className="font-semibold text-brand">{Math.round(expectedRecall * 100)}%</strong>
           </>
         )}
       </p>

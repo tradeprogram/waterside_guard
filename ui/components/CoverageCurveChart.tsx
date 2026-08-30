@@ -10,9 +10,9 @@ const PAD_T = 12;
 const PAD_B = 34;
 
 const SERIES_STYLE: Record<string, { label: string; color: string; dash?: string }> = {
-  proposed: { label: "수변가드(다요인)", color: "#171717" },
-  ndvi_only: { label: "NDVI 이상도만", color: "#2563eb", dash: "4 3" },
-  recency: { label: "마지막 점검일만", color: "#ea580c", dash: "4 3" },
+  proposed: { label: "수변가드 (다요인)", color: "var(--brand)" },
+  ndvi_only: { label: "NDVI 이상도 단독", color: "var(--est)", dash: "4 3" },
+  recency: { label: "최종 점검일 기준", color: "var(--warn)", dash: "4 3" },
 };
 
 /**
@@ -32,30 +32,30 @@ export default function CoverageCurveChart({ curves }: { curves: Record<string, 
 
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="점검 커버리지 대비 변화 발견율">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="점검 범위별 변화 발견율">
         {/* 격자 + 축 눈금 */}
         {[0, 0.25, 0.5, 0.75, 1].map((r) => (
           <g key={r}>
-            <line x1={PAD_L} x2={W - PAD_R} y1={y(r)} y2={y(r)} stroke="#e5e5e5" strokeWidth={1} />
-            <text x={PAD_L - 6} y={y(r) + 3} fontSize={9} textAnchor="end" fill="#737373">
+            <line x1={PAD_L} x2={W - PAD_R} y1={y(r)} y2={y(r)} stroke="var(--line)" strokeWidth={1} />
+            <text x={PAD_L - 6} y={y(r) + 3} fontSize={9} textAnchor="end" fill="var(--ink-3)">
               {Math.round(r * 100)}%
             </text>
           </g>
         ))}
         {[0, 25, 50, 75, 100].map((p) => (
-          <text key={p} x={x(p)} y={H - 16} fontSize={9} textAnchor="middle" fill="#737373">
+          <text key={p} x={x(p)} y={H - 16} fontSize={9} textAnchor="middle" fill="var(--ink-3)">
             {p}%
           </text>
         ))}
 
         {/* 무작위 기준선 — 이 대각선 위로 볼록해야 우선순위화가 작동한 것 */}
-        <line x1={x(0)} y1={y(0)} x2={x(100)} y2={y(1)} stroke="#a3a3a3" strokeWidth={1} strokeDasharray="2 3" />
-        <text x={x(52)} y={y(0.5) - 4} fontSize={8} fill="#a3a3a3" transform={`rotate(-22 ${x(52)} ${y(0.5)})`}>
-          무작위
+        <line x1={x(0)} y1={y(0)} x2={x(100)} y2={y(1)} stroke="var(--ink-3)" strokeWidth={1} strokeDasharray="2 3" />
+        <text x={x(52)} y={y(0.5) - 4} fontSize={8} fill="var(--ink-3)" transform={`rotate(-22 ${x(52)} ${y(0.5)})`}>
+          무작위 선정
         </text>
 
         {series.map(([name, points]) => {
-          const style = SERIES_STYLE[name] ?? { label: name, color: "#737373" };
+          const style = SERIES_STYLE[name] ?? { label: name, color: "var(--ink-3)" };
           // 원점(0%, 0)에서 시작해야 곡선의 시작 기울기가 정직하게 보인다
           const d = [`M ${x(0)} ${y(0)}`, ...points.map((p) => `L ${x(p.coverage_pct)} ${y(p.recall)}`)].join(" ");
           return (
@@ -69,24 +69,24 @@ export default function CoverageCurveChart({ curves }: { curves: Record<string, 
 
         {/* 범례 */}
         {series.map(([name], i) => {
-          const style = SERIES_STYLE[name] ?? { label: name, color: "#737373" };
+          const style = SERIES_STYLE[name] ?? { label: name, color: "var(--ink-3)" };
           return (
             <g key={name} transform={`translate(${W - PAD_R + 6}, ${PAD_T + 10 + i * 16})`}>
               <line x1={0} x2={14} y1={0} y2={0} stroke={style.color} strokeWidth={2} strokeDasharray={style.dash} />
-              <text x={18} y={3} fontSize={9} fill="#404040">
+              <text x={18} y={3} fontSize={9} fill="var(--ink-2)">
                 {style.label}
               </text>
             </g>
           );
         })}
 
-        <text x={(PAD_L + W - PAD_R) / 2} y={H - 3} fontSize={9} textAnchor="middle" fill="#525252">
-          현장점검 가능 비율 (상위 K%)
+        <text x={(PAD_L + W - PAD_R) / 2} y={H - 3} fontSize={9} textAnchor="middle" fill="var(--ink-2)">
+          점검 가능 비율 (상위 K%)
         </text>
       </svg>
-      <p className="text-xs text-neutral-500">
-        가로축은 &ldquo;전체 대상지 중 몇 %를 점검할 여력이 있는가&rdquo;, 세로축은 &ldquo;그 범위 안에서 실제 변화
-        사례의 몇 %를 찾았는가&rdquo;입니다. 무작위 대각선 위로 볼록할수록 우선순위화가 실제로 기여한 것입니다.
+      <p className="text-[11px] leading-snug text-ink-3">
+        가로축은 전체 대상 필지 중 점검 가능한 비율, 세로축은 그 범위 안에서 실제 변화 사례를 발견한
+        비율입니다. 무작위 선정 대각선보다 위로 볼록할수록 우선순위 산정이 실제로 기여한 것입니다.
       </p>
     </div>
   );

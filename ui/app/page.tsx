@@ -69,8 +69,8 @@ export default function Home() {
       }
     } catch (e) {
       setError(
-        `API 서버(${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001"})에 연결할 수 없습니다. ` +
-          `'python -m uvicorn api_server:app --port 8001'로 백엔드를 먼저 띄워주세요. (${e instanceof Error ? e.message : e})`
+        `분석 서버(${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001"})에 연결할 수 없습니다. ` +
+          `'python -m uvicorn api_server:app --port 8001' 실행 후 다시 시도해 주십시오. (${e instanceof Error ? e.message : e})`
       );
     }
   }, [budget]);
@@ -85,36 +85,60 @@ export default function Home() {
 
   const selectedSite = sites.find((s) => s.site_id === selectedSiteId) ?? null;
 
+  const uninspected = queue.filter((q) => q.status === "미점검").length;
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-white text-neutral-900">
-      <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-2">
-        <div>
-          <h1 className="text-lg font-bold">수변가드 AI</h1>
-          <p className="text-xs text-neutral-500">한강유역 6개 시/군/구 — 오늘 먼저 가봐야 할 곳</p>
-        </div>
+    <div className="flex h-screen w-screen flex-col bg-bg text-ink">
+      <header className="glass-bar z-30 flex shrink-0 items-center justify-between px-5 py-2.5">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-neutral-400">
-            Top-{queue.length} · 미점검 {queue.filter((q) => q.status === "미점검").length}
+          {/* 브랜드 마크 — 수변(물결)과 보호(방패)를 겹친 형태 */}
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-lg shadow-sm"
+            style={{ background: "linear-gradient(135deg, var(--brand), var(--brand-2))" }}
+            aria-hidden
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="#fff" strokeWidth={1.9}>
+              <path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6l7-3z" strokeLinejoin="round" />
+              <path d="M8 12.5c1-1 2-1 3 0s2 1 3 0" strokeLinecap="round" />
+            </svg>
           </span>
-          <button
-            onClick={() => setBacktestOpen(true)}
-            className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
-          >
-            성과 검증
+          <div>
+            <h1 className="text-[15px] font-bold leading-tight tracking-tight">수변가드 AI</h1>
+            <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 점검 우선순위 지원시스템</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="mr-1 hidden items-center gap-3 text-[11px] text-ink-3 sm:flex">
+            <span>
+              점검대상 <strong className="font-semibold text-ink-2">{queue.length}</strong>필지
+            </span>
+            <span className="h-3 w-px bg-line" aria-hidden />
+            <span>
+              미점검 <strong className="font-semibold text-warn">{uninspected}</strong>필지
+            </span>
+          </div>
+          <button onClick={() => setBacktestOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
+            예측 성능 검증
           </button>
-          <button
-            onClick={() => setWeeklyReportOpen(true)}
-            className="rounded border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
-          >
-            주간보고서
+          <button onClick={() => setWeeklyReportOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
+            주간 점검현황
           </button>
         </div>
       </header>
 
-      {error && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div
+          className="shrink-0 px-5 py-2 text-sm"
+          style={{ background: "var(--danger-soft)", color: "var(--danger)", borderBottom: "1px solid var(--line)" }}
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-72 shrink-0 flex-col border-r border-neutral-200">
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
+        <aside className="glass flex w-[19rem] shrink-0 flex-col overflow-hidden">
           <InspectionBudgetPanel
             entries={queue}
             budget={budget}
@@ -122,7 +146,7 @@ export default function Home() {
             expectedRecall={expectedRecall}
           />
           <RoutePanel route={route} />
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">
             <PriorityQueueList
               entries={queue}
               sites={sites}
@@ -133,7 +157,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1">
+        <main className="glass min-w-0 flex-1 overflow-hidden">
           <MapView
             sites={sites}
             selectedSiteId={selectedSiteId}
@@ -144,7 +168,7 @@ export default function Home() {
         </main>
 
         {selectedSite && (
-          <aside className="w-96 shrink-0 border-l border-neutral-200">
+          <aside className="glass w-[25rem] shrink-0 overflow-hidden">
             <EvidencePanel site={selectedSite} onInspectionSubmitted={reload} />
           </aside>
         )}

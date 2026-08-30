@@ -48,8 +48,8 @@ function waitForSource(map: MapLibreMap, sourceId: string, callback: () => void)
 const TIER_COLOR: Record<string, string> = {
   "1순위": "#c0392b",
   "2순위": "#e67e22",
-  "3순위": "#f1c40f",
-  정상: "#7f9f7f",
+  "3순위": "#d4a017",
+  정상: "#5b8c6e",
 };
 
 export default function MapView({
@@ -134,7 +134,7 @@ export default function MapView({
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
           // 점선 = "직선거리 기준 방문 순서"이지 실제 주행 경로가 아니라는 시각적 신호
-          paint: { "line-color": "#2563eb", "line-width": 2, "line-dasharray": [2, 2], "line-opacity": 0.8 },
+          paint: { "line-color": "#277086", "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": 0.9 },
         });
 
         map.addSource("sites", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
@@ -352,12 +352,25 @@ export default function MapView({
   }, [selectedSiteId, sites]);
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       <div ref={containerRef} className="h-full w-full" />
       {overlayLoading && (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-neutral-900/85 px-3 py-1.5 text-xs text-white shadow">
-          <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          위성 이미지 불러오는 중...
+        <div
+          className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full px-3.5 py-2 text-[12px] font-medium"
+          style={{
+            background: "var(--surface-glass-strong)",
+            backdropFilter: "var(--glass-blur)",
+            border: "1px solid var(--line)",
+            boxShadow: "var(--shadow)",
+            color: "var(--ink-2)",
+          }}
+          role="status"
+        >
+          <span
+            className="h-3 w-3 animate-spin rounded-full border-2"
+            style={{ borderColor: "var(--line-strong)", borderTopColor: "var(--brand)" }}
+          />
+          위성영상 생성 중
         </div>
       )}
     </div>

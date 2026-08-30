@@ -1,26 +1,212 @@
 @import "tailwindcss";
 
+/* 디자인 토큰 — tradeprogram/policymaps의 :root를 계승한다.
+   청록 계열은 한국환경보전원의 정체성(물·환경)과 맞고, 기존 프로젝트들과 시각 언어가
+   통일된다. 다만 **의미색(등급·경고·정상)은 브랜드색으로 물들이지 않는다** — 1순위와
+   3순위가 비슷해 보이면 그 순간 도구로서 실패한다. 브랜드색은 크롬(헤더·활성상태·포커스)에만
+   쓰고, 데이터에는 판별력이 확보된 의미색만 쓴다. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #eef3f5;
+  --surface: #ffffff;
+  --surface-glass: rgba(255, 255, 255, 0.76);
+  --surface-glass-strong: rgba(255, 255, 255, 0.88);
+  --ink: #1a1d21;
+  --ink-2: #545c66;
+  --ink-3: #8a929c;
+  --line: rgba(108, 123, 138, 0.24);
+  --line-strong: rgba(108, 123, 138, 0.38);
+  --brand: #277086;
+  --brand-2: #3a8b9c;
+  --brand-soft: #e7f4f6;
+  --accent: #6fb7be;
+  --warn: #b7791f;
+  --warn-soft: #fdf6e3;
+  --danger: #c0392b;
+  --danger-soft: #fdecea;
+  --ok: #1e7a4b;
+  --ok-soft: #e8f6ee;
+  /* 추정·근사치 전용 색 — 실측과 시각적으로 구분되어야 한다(§9 불확실성 표기) */
+  --est: #7d5ba6;
+  --est-soft: #f2edf9;
+  --radius: 8px;
+  --shadow: 0 16px 40px rgba(39, 68, 82, 0.1), 0 2px 8px rgba(16, 24, 40, 0.06);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --glass-blur: blur(16px) saturate(1.15);
+
+  /* 점검 우선순위 등급 — 판별력이 최우선이라 색상환에서 최대한 벌려 놓는다.
+     figure(scripts/generate_figures.py TIER_COLOR)와 같은 값을 쓴다. */
+  --tier-1: #c0392b;
+  --tier-2: #e67e22;
+  --tier-3: #d4a017;
+  --tier-normal: #5b8c6e;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-est: var(--est);
+  --color-est-soft: var(--est-soft);
+  --font-sans: var(--font-noto-sans-kr), var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* 이 화면은 밝은 테마 하나로 고정한다 — 기관 업무화면이고, 등급 색(적/주/황/녹)의 판별력을
+   두 테마에서 동시에 보장하려면 팔레트를 두 벌 검증해야 한다. 선언하지 않으면 OS가 다크일 때
+   select·input 같은 네이티브 컨트롤만 어둡게 렌더되어 화면이 섞인다. */
+:root {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-noto-sans-kr), var(--font-geist-sans), system-ui, sans-serif;
+  /* 숫자가 자리마다 흔들리면 순위·점수를 읽기 어렵다 */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 표면 ─────────────────────────────────────────────────────────────
+   글라스는 뒤에 배경이 비쳐야 의미가 있다. 패널은 --bg 위에 카드로 띄우고
+   본문 가독성이 필요한 곳은 strong(불투명도 0.88)을 쓴다 — 데이터를 읽는 화면에서
+   대비를 깎으면서까지 투명하게 만들지 않는다. */
+/* 접두사를 먼저, 표준 속성을 나중에 쓴다 — 순서를 뒤집으면 Lightning CSS가 두 선언을
+   합치면서 표준 `backdrop-filter` 쪽을 버리고 `-webkit-` 만 남긴다(2026-08-31 실측:
+   그 상태에서 크로미움이 블러를 아예 적용하지 않아 패널 뒤 텍스트가 그대로 비쳤다). */
+.glass {
+  background: var(--surface-glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.glass-bar {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--line);
+}
+
+.card {
+  background: var(--surface-glass-strong);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* ── 컨트롤 ──────────────────────────────────────────────────────── */
+.pill {
+  border-radius: 999px;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.pill-active {
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(39, 112, 134, 0.32);
+}
+
+.btn-ghost {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-glass);
+  color: var(--ink-2);
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-ghost:hover {
+  background: var(--brand-soft);
+  border-color: var(--accent);
+  color: var(--brand);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  color: #fff;
+  border-radius: 6px;
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 12px rgba(39, 112, 134, 0.28);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+}
+
+.field {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field::placeholder {
+  color: var(--ink-3);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(111, 183, 190, 0.24);
+}
+
+/* 키보드 사용자를 위한 포커스 링 — 브랜드색으로 통일한다 */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 섹션 제목 ────────────────────────────────────────────────────
+   한글은 letter-spacing을 벌리면 오히려 읽기 나빠지고 uppercase도 의미가 없다.
+   영문 기준으로 짜인 기존 스타일(uppercase tracking-wide)을 여기서 정리한다. */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+
+/* ── 스크롤바 ────────────────────────────────────────────────────── */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* MapLibre 기본 컨트롤을 앱 톤에 맞춘다 */
+.maplibregl-ctrl-group {
+  border-radius: 6px !important;
+  box-shadow: var(--shadow-sm) !important;
+  border: 1px solid var(--line) !important;
 }
