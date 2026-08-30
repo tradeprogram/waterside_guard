@@ -22,8 +22,8 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "수변가드 AI — 수변녹지 점검 우선순위 지원시스템",
-  description: "한강수계 매수토지·수변녹지의 위성 변화탐지 기반 현장점검 우선순위 지원시스템",
+  title: "수변생태벨트 점검 우선순위 지원시스템",
+  description: "한강수계 매수토지 · 위성 변화탐지 기반 현장점검 순서 산정. 한국환경보전원 수변생태벨트 조성·관리 사업의 점검 인력 배분을 지원한다.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

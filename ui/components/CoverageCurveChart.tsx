@@ -10,7 +10,7 @@ const PAD_T = 12;
 const PAD_B = 34;
 
 const SERIES_STYLE: Record<string, { label: string; color: string; dash?: string }> = {
-  proposed: { label: "수변가드 (다요인)", color: "var(--brand)" },
+  proposed: { label: "본 시스템 (다요인 통합)", color: "var(--brand)" },
   ndvi_only: { label: "NDVI 이상도 단독", color: "var(--est)", dash: "4 3" },
   recency: { label: "최종 점검일 기준", color: "var(--warn)", dash: "4 3" },
 };

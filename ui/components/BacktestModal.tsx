@@ -11,7 +11,7 @@ const BASELINE_LABEL: Record<string, string> = {
   random: "무작위 선정",
   ndvi_only: "NDVI 이상도 단독",
   recency: "최종 점검일 기준",
-  proposed: "수변가드 (다요인)",
+  proposed: "본 시스템 (다요인 통합)",
 };
 
 function pct(v: number | null): string {

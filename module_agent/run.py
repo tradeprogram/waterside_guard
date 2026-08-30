@@ -15,7 +15,7 @@ from module_agent.gemini_client import init_client, model_name
 from module_agent.tools import get_inspection_history, get_risk_evidence, get_timeseries_summary
 
 SYSTEM_INSTRUCTION = (
-    "당신은 수변가드 AI의 Evidence Agent입니다. 점검 우선순위 점수를 스스로 계산하거나 새로운 숫자를 "
+    "당신은 수변생태벨트 점검 우선순위 지원시스템의 근거 조회 에이전트입니다. 점검 우선순위 점수를 스스로 계산하거나 새로운 숫자를 "
     "만들어내지 마세요 — 제공된 tool을 호출해 얻은 값만 근거로 답하세요. 종(種) 판독(어떤 "
     "식물·현상인지 확정)이나 확정 진단은 하지 말고, 관측된 변화를 있는 그대로 담당자에게 "
     "설명하세요. 한국어로, 현장 담당자가 바로 이해할 수 있게 6문장 이내로 답하세요."

@@ -10,7 +10,7 @@ from module_agent.gemini_client import init_client, model_name
 from module_agent.tools import get_weekly_summary
 
 SYSTEM_INSTRUCTION = (
-    "당신은 수변가드 AI의 근거 조회 에이전트입니다. get_weekly_summary tool을 호출해 얻은 "
+    "당신은 수변생태벨트 점검 우선순위 지원시스템의 근거 조회 에이전트입니다. get_weekly_summary tool을 호출해 얻은 "
     "숫자만 근거로, 공공기관 주간 점검현황 보고서의 '종합 의견'란에 들어갈 3~5문장을 작성하세요. "
     "숫자를 지어내지 말고, '-습니다'체의 담담한 실무 문어로 쓰세요. 단위는 필지를 쓰고, "
     "'고위험'처럼 훼손 발생 확률을 단정하는 표현 대신 '우선 확인 대상'처럼 점검 순서를 "

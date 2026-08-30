@@ -126,7 +126,7 @@ function ReportBody({ data, budget }: { data: ReportData; budget: number }) {
       <header className="mb-6 avoid-break">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[11px] font-semibold tracking-wide text-brand">수변녹지 점검 우선순위 지원시스템</p>
+            <p className="text-[11px] font-semibold tracking-wide text-brand">수변생태벨트 점검 우선순위 지원시스템</p>
             <h1 className="mt-1 text-[22px] font-bold leading-tight">주간 점검현황 보고</h1>
           </div>
           <div className="text-right text-[11px] leading-relaxed text-ink-3">
@@ -344,7 +344,7 @@ function ReportBody({ data, budget }: { data: ReportData; budget: number }) {
 
         <p className="mt-4 border-t pt-2 text-[10px] text-ink-3" style={{ borderColor: "var(--line)" }}>
           Sentinel-2 광학 / Sentinel-1 레이더 관측, JRC 수역 자료, 기상 강수 자료를 근거로 산출. 작성{" "}
-          {data.generatedAt} · 수변가드 AI
+          {data.generatedAt} · 수변생태벨트 점검 우선순위 지원시스템
         </p>
       </section>
     </>

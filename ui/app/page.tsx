@@ -106,8 +106,8 @@ export default function Home() {
               </svg>
             </span>
             <div>
-              <h1 className="text-[15px] font-bold leading-tight tracking-tight">수변가드 AI</h1>
-              <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 점검 우선순위 지원시스템</p>
+              <h1 className="text-[14px] font-bold leading-tight tracking-tight">수변생태벨트 점검 우선순위 지원시스템</h1>
+              <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 · 위성 변화탐지 기반 현장점검 순서 산정</p>
             </div>
           </div>
 

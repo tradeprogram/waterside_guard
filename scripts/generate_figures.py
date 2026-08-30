@@ -40,7 +40,9 @@ RED = "#c0392b"
 GREEN = "#15803d"
 BLUE = "#2563eb"
 ORANGE = "#e67e22"
-TIER_COLOR = {"1순위": "#c0392b", "2순위": "#e67e22", "3순위": "#f1c40f", "정상": "#7f9f7f"}
+# ui/lib/tiers.ts, ui/app/globals.css의 --tier-* 와 반드시 같은 값 — 화면과 제안서 그림에서
+# 같은 등급이 다른 색으로 보이면 그 자체로 신뢰를 깎는다.
+TIER_COLOR = {"1순위": "#c0392b", "2순위": "#e67e22", "3순위": "#d4a017", "정상": "#5b8c6e"}
 
 
 def _api(path: str) -> dict:
@@ -194,8 +196,8 @@ def fig_route_savings() -> None:
     fig, ax = plt.subplots(figsize=(8, 4.4))
     x = range(len(budgets))
     w = 0.34
-    ax.bar([i - w / 2 for i in x], naive, w, label="우선순위 순서대로 이동", color=FAINT)
-    ax.bar([i + w / 2 for i in x], clustered, w, label="가까운 곳끼리 묶어 이동", color=BLUE)
+    ax.bar([i - w / 2 for i in x], naive, w, label="순위 순차 방문", color=FAINT)
+    ax.bar([i + w / 2 for i in x], clustered, w, label="권역 통합 방문", color=BLUE)
 
     for i, (n, c, p) in enumerate(zip(naive, clustered, saved_pct)):
         ax.text(i - w / 2, n + 6, f"{n:.0f}km", ha="center", fontsize=9, color=MUTED)
@@ -205,10 +207,10 @@ def fig_route_savings() -> None:
                     color=GREEN, fontweight="bold")
 
     ax.set_xticks(list(x))
-    ax.set_xticklabels([f"상위 {b}곳" for b in budgets], fontsize=10, color=INK)
+    ax.set_xticklabels([f"상위 {b}필지" for b in budgets], fontsize=10, color=INK)
     ax.set_ylabel("총 이동거리 (km)", fontsize=10, color=INK)
     ax.set_ylim(0, max(naive) * 1.25)
-    ax.set_title("같은 대상지를 도는 데 필요한 이동거리", fontsize=12, fontweight="bold", color=INK, pad=12)
+    ax.set_title("동일한 점검 대상에 필요한 이동거리", fontsize=12, fontweight="bold", color=INK, pad=12)
     ax.legend(fontsize=9, frameon=False, loc="upper left")
     _style(ax)
     fig.text(0.5, -0.03,
@@ -437,7 +439,7 @@ def fig_workflow() -> None:
     _box(ax, 2.5, 7.9, 5, 0.85, "광역 위성 관측\nSentinel-2 · Sentinel-1 · (국토위성)", "#f5f5f5", FAINT, 10)
     _box(ax, 2.5, 6.4, 5, 0.85, "변화 선별\n계절 정합 기준선 · 센서 일치 · 품질 게이트", "#eff6ff", BLUE, 10)
     _box(ax, 2.5, 4.9, 5, 0.85, "점검 우선순위 + 근거\n왜 이 순위인가 · 증거 신뢰도", "#eff6ff", BLUE, 10, "bold")
-    _box(ax, 2.5, 3.4, 5, 0.85, "이번 주 갈 수 있는 만큼 Top-N\n가까운 곳끼리 묶어 방문 순서", "#eff6ff", BLUE, 10)
+    _box(ax, 2.5, 3.4, 5, 0.85, "주간 점검 가능 인력에 맞춘 상위 N필지\n권역별 통합 방문 순서", "#eff6ff", BLUE, 10)
 
     _box(ax, 1.35, 1.6, 3.15, 0.85, "현장직원 확인", "#f0fdf4", GREEN, 10)
     _box(ax, 5.5, 1.6, 3.15, 0.85, "드론 확인", "#f0fdf4", GREEN, 10)
@@ -460,10 +462,10 @@ def fig_workflow() -> None:
     ax.text(fx + 0.14, 3.05, "현장 결과가\n다음 주기\n우선순위에\n반영", fontsize=8.5, color=ORANGE,
             ha="left", va="center", linespacing=1.6)
 
-    ax.text(5, 8.98, "수변가드 AI — 관측에서 현장 확인까지", fontsize=13.5, fontweight="bold",
+    ax.text(5, 8.98, "수변생태벨트 점검 우선순위 지원시스템 — 관측에서 현장 확인까지", fontsize=12.5, fontweight="bold",
             color=INK, ha="center")
     ax.text(5, -0.35,
-            "위성은 훼손을 확정하지 않는다. 넓은 대상지에서 먼저 볼 후보를 좁히고, 확정은 현장직원과 드론이 한다\n"
+            "위성은 훼손을 확정하지 않는다. 넓은 대상 지역에서 먼저 확인할 후보를 좁히고, 확정은 현장직원과 드론이 한다\n"
             "— 드론을 대체하는 것이 아니라 어디로 보낼지를 정한다.",
             fontsize=9, color=MUTED, ha="center", linespacing=1.6)
     fig.tight_layout()
