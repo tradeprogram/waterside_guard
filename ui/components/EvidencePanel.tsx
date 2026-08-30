@@ -9,6 +9,7 @@ import HighResHistory from "./HighResHistory";
 import ScoreBreakdown from "./ScoreBreakdown";
 import EvidenceConfidence from "./EvidenceConfidence";
 import SeasonalBaselineChart from "./SeasonalBaselineChart";
+import SiteTimeline from "./SiteTimeline";
 
 export default function EvidencePanel({ site, onInspectionSubmitted }: { site: Site; onInspectionSubmitted: () => void }) {
   const [timeseries, setTimeseries] = useState<{ baseline_scenes: Scene[]; current_scenes: Scene[] } | null>(null);
@@ -76,6 +77,12 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
           <p className="text-sm text-neutral-400">불러오는 중...</p>
         )}
       </div>
+
+      <SiteTimeline
+        seasonal={evidence?.seasonal_anomaly ?? null}
+        currentScenes={timeseries?.current_scenes ?? []}
+        inspections={site.inspections}
+      />
 
       <InspectionForm siteId={site.site_id} onSubmitted={onInspectionSubmitted} />
 

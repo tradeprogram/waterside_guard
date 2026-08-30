@@ -165,6 +165,40 @@ export type BacktestResult = {
   positive_count: number;
 };
 
+// module_o/routing.py — 예산 안의 대상지를 묶어 방문 순서를 정한 결과.
+export type RouteStop = {
+  site_id: string;
+  rank: number;
+  addr: string | null;
+  inspection_priority_score: number | null;
+  status: string;
+  lonlat: [number, number] | null;
+};
+
+export type RouteCluster = {
+  cluster_id: number;
+  size: number;
+  site_ids: string[];
+  route_length_m: number;
+  radius_m: number;
+  top_rank: number;
+  stops: RouteStop[];
+};
+
+export type RouteResult = {
+  clusters: RouteCluster[];
+  cluster_count: number;
+  naive_order_length_m: number;
+  clustered_order_length_m: number;
+  saved_length_m: number;
+  saved_pct: number;
+  distance_basis: string;
+};
+
+export function fetchRoute(budget: number) {
+  return getJson<Envelope<RouteResult>>(`/priority-queue/route?budget=${budget}`);
+}
+
 // module_verify/ablation.py — 라벨 없이 낼 수 있는 "방법 기여도" 근거.
 export type AblationEntry = {
   site_id: string;

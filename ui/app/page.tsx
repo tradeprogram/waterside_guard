@@ -2,13 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { fetchBacktest, fetchPriorityQueue, fetchSites, type PriorityQueueEntry, type Site } from "@/lib/api";
+import {
+  fetchBacktest,
+  fetchPriorityQueue,
+  fetchRoute,
+  fetchSites,
+  type PriorityQueueEntry,
+  type RouteResult,
+  type Site,
+} from "@/lib/api";
 import PriorityQueueList from "@/components/PriorityQueueList";
 import EvidencePanel from "@/components/EvidencePanel";
 import AgentChatWidget from "@/components/AgentChatWidget";
 import BacktestModal from "@/components/BacktestModal";
 import WeeklyReportModal from "@/components/WeeklyReportModal";
 import InspectionBudgetPanel from "@/components/InspectionBudgetPanel";
+import RoutePanel from "@/components/RoutePanel";
 
 // MapLibre는 window에 의존하므로 SSR을 끈다
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -24,6 +33,8 @@ export default function Home() {
   const [budget, setBudget] = useState(10);
   // 예산 범위에서 실제로 몇 %를 잡을 수 있는지는 **검증 데이터가 있을 때만** 표시한다.
   const [expectedRecall, setExpectedRecall] = useState<number | null>(null);
+  // 예산 안의 대상지를 묶어 만든 출장 계획 — 예산이 바뀌면 다시 계산된다.
+  const [route, setRoute] = useState<RouteResult | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -49,6 +60,12 @@ export default function Home() {
         }
       } catch {
         setExpectedRecall(null); // 검증 정보는 부가 기능 — 실패해도 큐는 그대로 보여준다
+      }
+
+      try {
+        setRoute((await fetchRoute(budget)).data);
+      } catch {
+        setRoute(null); // 출장 묶음도 부가 기능 — 실패해도 우선순위 큐는 살아 있어야 한다
       }
     } catch (e) {
       setError(
@@ -104,6 +121,7 @@ export default function Home() {
             onBudgetChange={setBudget}
             expectedRecall={expectedRecall}
           />
+          <RoutePanel route={route} />
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <PriorityQueueList
               entries={queue}
@@ -121,6 +139,7 @@ export default function Home() {
             selectedSiteId={selectedSiteId}
             onSelectSite={setSelectedSiteId}
             budgetSiteIds={queue.slice(0, budget).map((q) => q.site_id)}
+            routeStops={route?.clusters.flatMap((c) => c.stops) ?? []}
           />
         </main>
 

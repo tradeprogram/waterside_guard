@@ -23,11 +23,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from common.geo import geometry_5179_to_4326
+from common.geo import geometry_5179_to_4326, point_4326_to_5179
 from module_agent.report import generate as agent_generate_report
 from module_agent.run import run as agent_run
 from module_chg.run import compute_change_from_scenes as chg_compute
 from module_field.run import run as field_run
+from module_o.routing import run as routing_run
 from module_o.run import run as o_run
 from module_o.store import store
 from module_obs.thumbnail import run as thumbnail_run
@@ -303,6 +304,79 @@ def get_priority_queue(week_of: str = "current") -> dict:
     if result["status"] == "error":
         raise HTTPException(500, result["warnings"])
     return result
+
+
+@app.get("/priority-queue/route")
+def get_route(budget: int = 10, max_distance_m: int = 3000) -> dict:
+    """상위 `budget`곳을 가까운 것끼리 묶고 방문 순서를 정한다(§module_o/routing.py).
+
+    우선순위 큐는 "어디를 먼저 볼 것인가"만 알려주는데, 현장직원은 하루에 여러 곳을 돌아야
+    한다 — 1위가 여주, 2위가 가평이면 점수 순서대로 가는 건 비효율이다.
+
+    **거리는 직선거리다**(EPSG:5179 평면). 실제 도로 주행거리가 아니므로 응답의
+    `distance_basis`가 "straight_line"으로 표시되고 UI가 그대로 안내한다.
+    """
+    queue_result = o_run(
+        {
+            "week_of": "current",
+            "risk_results": [
+                {
+                    "site_id": e["site_id"],
+                    "inspection_priority_score": e.get("inspection_priority_score"),
+                    "priority_tier": e.get("priority_tier"),
+                    "contributing_factors": e.get("contributing_factors", []),
+                }
+                for e in store.all()
+            ],
+        }
+    )
+    top = queue_result["data"]["priority_queue"][:budget]
+
+    sites = []
+    for item in top:
+        entry = store.get(item["site_id"])
+        geometry = entry.get("geometry_geojson") if entry else None
+        center = _polygon_centroid(geometry) if geometry else None
+        # 거리 계산은 내부 규약대로 EPSG:5179 평면에서 한다(§4.1) — 위경도로 재면 위도에 따라
+        # 1도의 실제 거리가 달라져 군집 경계가 지역마다 뒤틀린다.
+        xy = None
+        if center:
+            lat, lon = center
+            xy = point_4326_to_5179(lon, lat)
+        sites.append(
+            {
+                "site_id": item["site_id"],
+                "rank": item["rank"],
+                "xy": xy,
+                "addr": entry.get("addr") if entry else None,
+                "inspection_priority_score": item.get("inspection_priority_score"),
+                "status": item.get("status"),
+            }
+        )
+
+    result = routing_run({"sites": sites, "max_distance_m": max_distance_m})
+    if result["status"] == "error":
+        raise HTTPException(500, result["warnings"])
+
+    # 화면이 지도에 선을 그리고 목록을 만들 수 있도록 site 상세를 함께 실어 보낸다
+    by_id = {s["site_id"]: s for s in sites}
+    for cluster in result["data"]["clusters"]:
+        cluster["stops"] = [
+            {
+                **by_id[stop["site_id"]],
+                "xy": None,  # 내부 좌표계는 응답에 노출하지 않는다(§4.1 출력은 4326)
+                "lonlat": _lonlat_of(by_id[stop["site_id"]]),
+            }
+            for stop in cluster["route"]
+        ]
+    return result
+
+
+def _lonlat_of(site: dict) -> list[float] | None:
+    entry = store.get(site["site_id"])
+    geometry = entry.get("geometry_geojson") if entry else None
+    center = _polygon_centroid(geometry) if geometry else None
+    return [center[1], center[0]] if center else None
 
 
 @app.get("/verify/backtest")

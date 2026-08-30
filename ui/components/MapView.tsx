@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LngLatBounds, Map as MapLibreMap, type GeoJSONSource, type ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { fetchThumbnails, type Site } from "@/lib/api";
+import { fetchThumbnails, type RouteStop, type Site } from "@/lib/api";
 
 // GeoJSON Polygon/MultiPolygon 좌표 배열을 재귀적으로 훑어 [lng, lat] 쌍만 뽑는다.
 // turf 같은 외부 라이브러리 없이 bbox 계산용으로만 쓴다.
@@ -57,12 +57,16 @@ export default function MapView({
   selectedSiteId,
   onSelectSite,
   budgetSiteIds = [],
+  routeStops = [],
 }: {
   sites: Site[];
   selectedSiteId: string | null;
   onSelectSite: (siteId: string) => void;
   /** 이번 주 점검 예산 안에 드는 site — 지도에서 테두리로 구분한다(§InspectionBudgetPanel). */
   budgetSiteIds?: string[];
+  /** 출장 방문 순서 — 지도에 경로선으로 그린다(§module_o/routing.py). 직선거리 기준이라
+      실제 도로가 아니므로 점선으로 그려 "이동 순서"임을 시각적으로 구분한다. */
+  routeStops?: RouteStop[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -122,6 +126,17 @@ export default function MapView({
       if (setupDone) return;
       if (!map.isStyleLoaded()) return; // 아직 준비 안 됐으면 이번 이벤트는 건너뛰고 다음 이벤트를 기다린다
       try {
+        // 출장 경로 — 마커보다 먼저 추가해 아래에 깔린다
+        map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-cap": "round", "line-join": "round" },
+          // 점선 = "직선거리 기준 방문 순서"이지 실제 주행 경로가 아니라는 시각적 신호
+          paint: { "line-color": "#2563eb", "line-width": 2, "line-dasharray": [2, 2], "line-opacity": 0.8 },
+        });
+
         map.addSource("sites", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         map.addLayer({
           id: "sites-fill",
@@ -270,6 +285,27 @@ export default function MapView({
 
     return waitForSource(map, "sites", render);
   }, [sites, selectedSiteId, budgetSiteIds]);
+
+  // 출장 경로선 — 방문 순서대로 centroid를 잇는다
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const draw = () => {
+      const source = map.getSource("route") as GeoJSONSource | undefined;
+      if (!source) return;
+      const coordinates = routeStops
+        .map((s) => s.lonlat)
+        .filter((c): c is [number, number] => Array.isArray(c));
+      source.setData(
+        coordinates.length >= 2
+          ? { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates }, properties: {} }] }
+          : { type: "FeatureCollection", features: [] }
+      );
+    };
+
+    return waitForSource(map, "route", draw);
+  }, [routeStops]);
 
   // 대상지를 선택하면: (1) 실제 NDVI 위성 이미지를 그 위치에 얹고 (2) 알아볼 수 있게 확대한다.
   // 대상지 폴리곤 자체가 수백 m²로 작아서, 60개 전체를 보던 줌 레벨에서는 선택해도 안 보인다.

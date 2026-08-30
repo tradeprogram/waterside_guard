@@ -180,6 +180,8 @@ sequenceDiagram
 | 증거 신뢰도 (`evidence_confidence`) | 🧪 Experimental | 판정 로직은 동작하나 **가중치가 label로 보정되지 않음** |
 | 계절 정합 baseline (season-matched) | ✅ Implemented | 과거 3년 동일계절 median/MAD 대비 robust z. 50/50건 적용, 부족 시 두 기간 차분 폴백 |
 | 점검예산 Top-N 시뮬레이터 | ✅ Implemented | 예산 설정 → 리스트·지도에 경계 반영. 예상 발견율은 **라벨이 있을 때만** 표시 |
+| 공간 군집화 + 방문 순서 | ✅ Implemented | 실측 절감: 상위 20곳 415km→252km(**39.2%**). 직선거리 기준임을 명시 |
+| 변화 이력 타임라인 | ✅ Implemented | 과거 같은 계절 관측 + 현재기간 장면 + 점검 이력을 한 시간축에 |
 | 현장점검 taxonomy (8종 + 보류) | ✅ Implemented | 오탐 원인(예초·계절변화)을 따로 받아 향후 label 기반 확보 |
 | 고해상도 실사 영상 (Esri Wayback) | ✅ Implemented | 시기별 서브미터 영상 + 필지 경계 — Evidence Card에서 현장 출동 전 판단용 |
 | 방법 기여도 검증 (ablation) | ✅ Implemented | **라벨 없이** 계절 기준선의 오탐 감소 효과 실측: 상위 10위 오염 6건→0건 |
