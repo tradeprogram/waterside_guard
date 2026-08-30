@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchBacktest, type BacktestResult, type Envelope } from "@/lib/api";
 import CoverageCurveChart from "./CoverageCurveChart";
+import AblationPanel from "./AblationPanel";
 
 // Module VERIFY(§ARCHITECTURE.md §5)의 GET /verify/backtest를 그대로 보여준다 — 이 화면이
 // 없으면 "예측 정확도가 어디 있나"라는 질문에 답할 방법이 없었다.
@@ -75,10 +76,15 @@ export default function BacktestModal({ onClose }: { onClose: () => void }) {
           {!loading && data && (
             <>
               {data.labeled_site_count === 0 ? (
-                <p className="rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  아직 현장점검 결과가 등록된 대상지가 없어 검증할 수 없습니다. 왼쪽 목록에서 점검을
-                  등록하면 여기에 정확도가 나타납니다.
-                </p>
+                <>
+                  <p className="mb-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    <strong>정확도(Precision@K)는 아직 산출할 수 없습니다.</strong> 실제 현장점검 결과가
+                    없기 때문입니다 — 0.5m급 영상으로도 수변녹지의 훼손 유형(예초 vs 식생 소실 등)은
+                    판별되지 않아, 현장·드론 확인이 있어야 정답지가 만들어집니다. 아래는 라벨 없이도
+                    낼 수 있는 근거입니다.
+                  </p>
+                  <AblationPanel />
+                </>
               ) : (
                 <>
                   <label className="mb-4 flex items-center gap-2 text-xs text-neutral-500">

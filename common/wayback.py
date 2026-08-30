@@ -85,9 +85,10 @@ def fetch_tile(release: str, z: int, x: int, y: int) -> bytes | None:
 EPOCH_CACHE_ZOOM = 13
 _epoch_cache: dict[tuple[int, int], list[dict]] = {}
 
-# 시기 탐색은 지역당 75회 왕복이라 세션마다 다시 하면 60개 site에 몇 분씩 걸린다 —
-# 결과가 잘 바뀌지 않는 값이므로 디스크에도 남겨 재실행을 즉시 끝낸다.
-EPOCH_CACHE_FILE = Path("data/labels/.wayback_epoch_cache.json")
+# 시기 탐색은 지역당 75회 왕복이라 매번 다시 하면 몇 분씩 걸린다 — 결과가 잘 바뀌지 않는
+# 값이므로 디스크에 남긴다. Evidence Card가 이 캐시에 의존하므로(§api_server /highres)
+# 임시 산출물이 아니라 저장소에 커밋하는 데이터 자산으로 취급한다.
+EPOCH_CACHE_FILE = Path("data/processed/wayback_epochs.json")
 MAX_WORKERS = 8  # Esri 타일 서버에 과하지 않은 수준의 동시 요청
 
 

@@ -5,6 +5,7 @@ import { fetchEvidence, fetchTimeseries, type Site, type Scene } from "@/lib/api
 import TimeSeriesChart from "./TimeSeriesChart";
 import InspectionForm from "./InspectionForm";
 import NdviThumbnails from "./NdviThumbnails";
+import HighResHistory from "./HighResHistory";
 import ScoreBreakdown from "./ScoreBreakdown";
 import EvidenceConfidence from "./EvidenceConfidence";
 import SeasonalBaselineChart from "./SeasonalBaselineChart";
@@ -62,6 +63,8 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
       <SeasonalBaselineChart seasonal={evidence?.seasonal_anomaly ?? null} />
 
       <EvidenceConfidence confidence={evidence?.evidence_confidence ?? null} />
+
+      <HighResHistory siteId={site.site_id} />
 
       <NdviThumbnails siteId={site.site_id} />
 

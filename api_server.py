@@ -26,10 +26,13 @@ from pydantic import BaseModel
 from common.geo import geometry_5179_to_4326
 from module_agent.report import generate as agent_generate_report
 from module_agent.run import run as agent_run
+from module_chg.run import compute_change_from_scenes as chg_compute
 from module_field.run import run as field_run
 from module_o.run import run as o_run
 from module_o.store import store
 from module_obs.thumbnail import run as thumbnail_run
+from common.wayback import DEFAULT_ZOOM, TILE_URL, deg2num, find_epochs, num2deg
+from module_verify.ablation import run as ablation_run
 from module_verify.run import run as verify_run
 
 # 영상 판독으로 만든 Ground Truth 라벨(§scripts/import_labels.py) — 있으면 서버 시작 시
@@ -184,6 +187,85 @@ def get_thumbnails(site_id: str) -> dict:
     }
 
 
+HIGHRES_GRID = 3  # 3x3 타일 = 약 360m — 필지(수십 m)와 주변 맥락이 함께 보이는 크기
+HIGHRES_MAX_EPOCHS = 4  # 최신 시기 우선. 너무 많으면 화면이 무거워진다
+
+
+def _polygon_centroid(geometry: dict) -> tuple[float, float] | None:
+    """꼭짓점 평균 — 타일 중심을 잡는 용도라 정밀할 필요 없다."""
+    pts: list[tuple[float, float]] = []
+
+    def walk(coords):
+        if not coords:
+            return
+        if isinstance(coords[0], (int, float)):
+            pts.append((coords[0], coords[1]))
+            return
+        for c in coords:
+            walk(c)
+
+    walk(geometry.get("coordinates"))
+    if not pts:
+        return None
+    return sum(p[1] for p in pts) / len(pts), sum(p[0] for p in pts) / len(pts)
+
+
+@app.get("/sites/{site_id}/highres")
+def get_highres_history(site_id: str) -> dict:
+    """Esri Wayback 고해상도(서브미터) 실사 영상을 시기별로 반환한다.
+
+    **왜 필요한가**: Evidence Card의 NDVI 썸네일은 Sentinel-2 10m라, 필지 중앙값
+    883㎡(약 3×3 픽셀)를 육안으로 확인할 수 없다. 현장직원이 출동 전에 "이건 갈 만한가"를
+    판단하려면 실제로 보이는 영상이 필요하다.
+
+    **서버가 이미지를 합성하지 않는다** — 타일 URL과 지리 범위만 내려주고 브라우저가
+    3×3으로 배치한다. 서버에서 합치면 site 하나당 36회 왕복이 응답 시간에 그대로 얹힌다.
+
+    **주의**: `date`는 Esri 배포일이지 촬영일이 아니다(Esri가 촬영일을 공개하지 않는다).
+    시기마다 촬영 계절이 달라 초록/갈색 차이가 날 수 있으므로 UI에서 그 점을 안내한다.
+    """
+    entry = store.get(site_id)
+    if entry is None:
+        raise HTTPException(404, f"site '{site_id}' not found")
+    geometry = entry.get("geometry_geojson")
+    if geometry is None:
+        raise HTTPException(404, f"site '{site_id}' has no geometry")
+
+    center = _polygon_centroid(geometry)
+    if center is None:
+        raise HTTPException(404, f"site '{site_id}' geometry has no coordinates")
+    lat, lon = center
+
+    epochs_meta = find_epochs(lat, lon)[-HIGHRES_MAX_EPOCHS:]
+    cx, cy = deg2num(lat, lon, DEFAULT_ZOOM)
+    half = HIGHRES_GRID // 2
+    north, west = num2deg(cx - half, cy - half, DEFAULT_ZOOM)
+    south, east = num2deg(cx + half + 1, cy + half + 1, DEFAULT_ZOOM)
+
+    epochs = [
+        {
+            "date": ep["date"],
+            "tiles": [
+                [
+                    TILE_URL.format(release=ep["release"], z=DEFAULT_ZOOM, x=cx + dx, y=cy + dy)
+                    for dx in range(-half, half + 1)
+                ]
+                for dy in range(-half, half + 1)
+            ],
+        }
+        for ep in epochs_meta
+    ]
+
+    return {
+        "site_id": site_id,
+        "grid": HIGHRES_GRID,
+        # [서, 북, 동, 남] — 프론트가 필지 폴리곤을 픽셀로 옮길 때 쓴다
+        "bounds": [west, north, east, south],
+        "geometry_geojson": geometry,
+        "epochs": epochs,
+    }
+
+
 @app.get("/sites/{site_id}/evidence")
 def get_evidence(site_id: str) -> dict:
     entry = store.get(site_id)
@@ -280,6 +362,39 @@ def get_backtest(period: str = "current", k: int = 10) -> dict:
             "k": k,
         }
     )
+    if result["status"] == "error":
+        raise HTTPException(500, result["warnings"])
+    return result
+
+
+@app.get("/verify/ablation")
+def get_ablation(k: int = 10) -> dict:
+    """계절 기준선의 기여도와 상위권 오염 여부 — **라벨 없이도 낼 수 있는 근거**.
+
+    `/verify/backtest`는 실제 현장 결과와 대조하는데, 이 프로토타입은 그 라벨이 없다.
+    이 엔드포인트는 대신 "방법을 켰을 때와 껐을 때 순위가 어떻게 달라지는가"를 비교한다 —
+    정확도가 아니라 **기여도**다(§module_verify/ablation.py).
+
+    두 기간 차분 점수는 저장돼 있지 않으므로 스냅샷의 scene 원자료로 다시 계산한다 —
+    실제 파이프라인과 같은 함수(`compute_change_from_scenes`)를 쓰므로 값이 어긋날 수 없다.
+    """
+    sites = []
+    for entry in store.all():
+        seasonal = entry.get("seasonal_anomaly") or {}
+        baseline_scenes = entry.get("baseline_scenes") or []
+        current_scenes = entry.get("current_scenes") or []
+        # 계절 기준선을 빼고 같은 함수를 다시 돌려 "그 방법이 없었다면" 점수를 얻는다
+        without_seasonal = chg_compute(baseline_scenes, current_scenes)
+        sites.append(
+            {
+                "site_id": entry["site_id"],
+                "seasonal_score": seasonal.get("seasonal_anomaly_score"),
+                "two_period_score": without_seasonal.get("anomaly_score") if without_seasonal else None,
+                "robust_z": seasonal.get("robust_z"),
+            }
+        )
+
+    result = ablation_run({"sites": sites, "k": k})
     if result["status"] == "error":
         raise HTTPException(500, result["warnings"])
     return result

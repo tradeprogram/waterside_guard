@@ -113,6 +113,20 @@ export function fetchThumbnails(siteId: string) {
   );
 }
 
+// api_server.py의 GET /sites/{id}/highres — Esri Wayback 시기별 고해상도 타일.
+// 서버가 이미지를 합성하지 않고 타일 URL만 주므로 프론트가 grid×grid로 배치한다.
+export type HighResHistoryData = {
+  site_id: string;
+  grid: number;
+  bounds: [number, number, number, number]; // [서, 북, 동, 남]
+  geometry_geojson: GeoJSON.Geometry;
+  epochs: { date: string; tiles: string[][] }[];
+};
+
+export function fetchHighRes(siteId: string) {
+  return getJson<HighResHistoryData>(`/sites/${encodeURIComponent(siteId)}/highres`);
+}
+
 export async function postInspection(payload: {
   site_id: string;
   inspector_id: string;
@@ -150,6 +164,28 @@ export type BacktestResult = {
   labeled_site_count: number;
   positive_count: number;
 };
+
+// module_verify/ablation.py — 라벨 없이 낼 수 있는 "방법 기여도" 근거.
+export type AblationEntry = {
+  site_id: string;
+  two_period_rank: number;
+  seasonal_rank: number;
+  robust_z: number | null;
+  within_normal_range: boolean;
+};
+
+export type AblationResult = {
+  comparable_site_count: number;
+  k: number;
+  dropped_out_of_top_k: AblationEntry[];
+  entered_top_k: AblationEntry[];
+  within_normal_range_count: number;
+  top_k_within_normal_range: string[];
+};
+
+export function fetchAblation(k: number) {
+  return getJson<Envelope<AblationResult>>(`/verify/ablation?k=${k}`);
+}
 
 export function fetchBacktest(k: number) {
   return getJson<Envelope<BacktestResult>>(`/verify/backtest?period=current&k=${k}`);
