@@ -32,6 +32,10 @@ from module_o.store import store
 from module_obs.thumbnail import run as thumbnail_run
 from module_verify.run import run as verify_run
 
+# 영상 판독으로 만든 Ground Truth 라벨(§scripts/import_labels.py) — 있으면 서버 시작 시
+# 현장점검 기록으로 함께 적재해 Backtest가 실제 정답지로 채점할 수 있게 한다.
+REVIEWED_LABELS_PATH = Path("data/labels/reviewed_labels.json")
+
 SNAPSHOT_PATHS = [
     Path("data/processed/yongin_yubang_priority_queue.geojson"),  # 실증 앵커(용인시 유방동, §3.1)
     Path("data/processed/hanriver_priority_queue.geojson"),  # 다른 시/군/구 표본(§12 B급 확장)
@@ -43,9 +47,23 @@ BASELINE_PERIOD = ["2024-06-01", "2024-08-31"]
 CURRENT_PERIOD = ["2026-06-01", "2026-08-25"]
 
 
+def _load_reviewed_labels() -> None:
+    """판독 라벨을 현장점검 기록으로 적재한다. 파일이 없으면 조용히 넘어간다(§4.2)."""
+    if not REVIEWED_LABELS_PATH.exists():
+        return
+    try:
+        records = json.loads(REVIEWED_LABELS_PATH.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — 라벨은 부가 자료, 깨져도 서버는 떠야 한다
+        return
+    for rec in records:
+        if store.get(rec.get("site_id")) is not None:
+            store.record_inspection(rec["site_id"], rec)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _load_snapshot()
+    _load_reviewed_labels()
     yield
 
 
@@ -101,6 +119,8 @@ def _load_one_snapshot(gdf) -> None:
                 "changed_area_ratio_source": row.changed_area_ratio_source,
                 "adjacent_to_water": row.adjacent_to_water,
                 "evidence_confidence": _json_field(row.evidence_confidence_json) or None,
+                "anomaly_method": row.anomaly_method,
+                "seasonal_anomaly": _json_field(row.seasonal_anomaly_json) or None,
                 "geometry_geojson": geometry_4326,
                 "baseline_scenes": _json_field(row.baseline_scenes_json),
                 "current_scenes": _json_field(row.current_scenes_json),
@@ -180,6 +200,8 @@ def get_evidence(site_id: str) -> dict:
         "weight_coverage": entry.get("weight_coverage"),
         "changed_area_ratio_source": entry.get("changed_area_ratio_source"),
         "evidence_confidence": entry.get("evidence_confidence"),
+        "anomaly_method": entry.get("anomaly_method"),
+        "seasonal_anomaly": entry.get("seasonal_anomaly"),
     }
 
 
@@ -228,7 +250,36 @@ def get_backtest(period: str = "current", k: int = 10) -> dict:
             }
         )
 
-    result = verify_run({"period": [period, period], "predictions": predictions, "field_results": field_results, "k": k})
+    # 비교 baseline — Module VERIFY는 "recency"·"ndvi_only"가 무엇인지 모른다(§ 경계 설계).
+    # 도메인을 아는 여기(호출부)가 랭킹을 만들어 넘기고, VERIFY는 채점만 한다.
+    # 이 세 가지를 함께 보여줘야 "우선순위화가 실제로 기여했는가"를 말할 수 있다:
+    #   - ndvi_only: 위성 이상도 하나만 보고 줄 세우면? (다요인 결합의 가치 검증)
+    #   - recency: 마지막 점검일만 보고 줄 세우면? (위성 없이 관리대장만으로 되는지 검증)
+    baseline_predictions = {
+        "ndvi_only": [
+            {"site_id": e["site_id"], "score": e.get("anomaly_score") or 0} for e in entries
+        ],
+        "recency": [
+            {
+                "site_id": e["site_id"],
+                "score": next(
+                    (f["value"] or 0 for f in e.get("contributing_factors", []) if f["factor"] == "last_inspection_days_ago"),
+                    0,
+                ),
+            }
+            for e in entries
+        ],
+    }
+
+    result = verify_run(
+        {
+            "period": [period, period],
+            "predictions": predictions,
+            "field_results": field_results,
+            "baseline_predictions": baseline_predictions,
+            "k": k,
+        }
+    )
     if result["status"] == "error":
         raise HTTPException(500, result["warnings"])
     return result
@@ -239,6 +290,7 @@ class InspectionRequest(BaseModel):
     inspector_id: str
     inspected_at: str
     actual_anomaly_found: bool
+    verdict: str | None = None  # "yes" | "no" | "uncertain" — 보류를 음성과 구분(§module_field)
     anomaly_category: str | None = None
     photo_refs: list[str] = []
     note: str | None = None

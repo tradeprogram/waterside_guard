@@ -178,10 +178,13 @@ sequenceDiagram
 | 최근 강우 (Open-Meteo) | ✅ Implemented | 신뢰도 confounder로도 사용 |
 | 우선순위 점수 (rule_v1) | ✅ Implemented | 7요인 가중합 + 결측 재정규화. **가중치·임계값은 초기 가정치** |
 | 증거 신뢰도 (`evidence_confidence`) | 🧪 Experimental | 판정 로직은 동작하나 **가중치가 label로 보정되지 않음** |
+| 계절 정합 baseline (season-matched) | ✅ Implemented | 과거 3년 동일계절 median/MAD 대비 robust z. 50/50건 적용, 부족 시 두 기간 차분 폴백 |
+| 점검예산 Top-N 시뮬레이터 | ✅ Implemented | 예산 설정 → 리스트·지도에 경계 반영. 예상 발견율은 **라벨이 있을 때만** 표시 |
+| 현장점검 taxonomy (8종 + 보류) | ✅ Implemented | 오탐 원인(예초·계절변화)을 따로 받아 향후 label 기반 확보 |
+| Ground Truth 라벨링 도구 | ✅ Implemented | 층화추출 후보 생성 + 판독 재수입 파이프라인 (`scripts/build_label_candidates.py`, `import_labels.py`) |
 | Top-N 우선순위 큐 · 현장점검 입력 | ✅ Implemented | end-to-end 브라우저 검증 완료 |
 | Precision@K / Recall@K 계산 엔진 | ✅ Implemented | 계산·leakage 가드 동작. **아래 항목과 구분할 것** |
-| **실제 정확도 검증 (Ground Truth)** | ⏳ **Planned** | **현재 최대 약점** — 독립 판독 라벨 50~100건 확보 후 실측 예정 |
-| 계절 정합 baseline (season-matched) | ⏳ Planned | 현재는 두 기간 단순 차분 — 계절성 오탐 방어 미완 |
+| **실제 정확도 검증 (Ground Truth)** | ⏳ **Planned** | **현재 최대 약점** — 도구는 준비됐고 **사람의 독립 판독 50~100건이 남았다** |
 | Evidence Agent (Gemini) | ✅ Implemented | 판정은 하지 않고 tool 결과 설명만 — 의도적으로 비중 축소 |
 | LightGBM ranking / SHAP | ❌ 미구현 (의도적) | label이 충분히 쌓이기 전에는 만들지 않는다 |
 | 전국 production 운영 | ❌ 미구현 (범위 밖) | 배치 아키텍처만 검증, 실제 배포는 파일럿 이후 |
@@ -198,6 +201,32 @@ sequenceDiagram
 | Sentinel-2 | 광학 위성 시계열 (Google Earth Engine) | **실증 완료, 6개 시/군/구로 확대** — `module_obs/batch.py`(배치 조회, 이미지 수에만 비례하는 API 호출)로 60필지 처리 |
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
+
+### Ground Truth 라벨링 워크플로 (제출 전 최우선 과제)
+
+현재 프로젝트의 단일 최대 약점은 **채점할 정답지가 없다**는 것이다. Module VERIFY의
+Precision@K 함수가 테스트를 통과한다는 건 *계산 코드가 맞다*는 뜻이지 *실제 탐지
+정확도가 높다*는 뜻이 아니다. 아래 3단계로 정답지를 만든다:
+
+```bash
+# 1) 판독 후보 추출 — 점수 구간별 층화추출 + Before/After 위성 이미지 URL 포함
+python scripts/build_label_candidates.py --n 60
+
+# 2) data/labels/label_candidates.csv 를 열어 사람이 판독
+#    verdict(yes/no/uncertain) · change_type · reviewer · reviewed_at 을 채운다
+#    → 가능하면 2명이 독립 판독하고 불일치 건만 재검토
+
+# 3) 판독 결과를 시스템에 반영
+python scripts/import_labels.py --dry-run   # 검증만
+python scripts/import_labels.py             # 저장 → api_server 재시작 시 Backtest가 채점
+```
+
+**왜 층화추출인가**: 점수 상위만 라벨링하면 Precision@K는 재도 **Recall은 못 잰다**(하위
+구간에 실제 변화가 얼마나 숨어 있는지 모르므로). 상위·중위·하위에서 고루 뽑아야
+"상위 20%만 봤을 때 전체 변화의 몇 %를 잡았는가"라는 핵심 지표를 계산할 수 있다.
+
+**판독 라벨 ≠ 현장점검**: 영상 판독은 현장 방문보다 약한 근거라, `label_source:
+"image_review"`로 표시해 나중에 섞이지 않게 한다.
 
 **현재 가장 큰 한계**: 실제 현장 라벨(Ground Truth)이 없어 Precision@K 같은 정확도를 아직 실측하지 못했다 — 검증 엔진(Module VERIFY)은 구현돼 있지만 채점할 정답지가 없는 상태다. 그다음 한계는 `site_attributes` 중 복원경과일·최근점검일·과거이상이력이 KECI 내부 자산 DB에서 와야 하는데 접근할 방법이 없다는 점이다(인접수계여부·최근강우는 공개 데이터로 해결됨). 결측 요인은 가중치를 빼고 재정규화하므로 점수가 구조적으로 눌리지는 않지만, `weight_coverage`로 "전체 근거의 75%만 확보된 점수"임을 항상 함께 표시한다 — 자세한 내용은 [ARCHITECTURE.md §13 "알려진 한계"](ARCHITECTURE.md#13-세션-브리핑--다음에-이-리포를-여는-claude-code-세션에게).
 

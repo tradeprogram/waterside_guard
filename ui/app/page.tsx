@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { fetchPriorityQueue, fetchSites, type PriorityQueueEntry, type Site } from "@/lib/api";
+import { fetchBacktest, fetchPriorityQueue, fetchSites, type PriorityQueueEntry, type Site } from "@/lib/api";
 import PriorityQueueList from "@/components/PriorityQueueList";
 import EvidencePanel from "@/components/EvidencePanel";
 import AgentChatWidget from "@/components/AgentChatWidget";
 import BacktestModal from "@/components/BacktestModal";
 import WeeklyReportModal from "@/components/WeeklyReportModal";
+import InspectionBudgetPanel from "@/components/InspectionBudgetPanel";
 
 // MapLibre는 window에 의존하므로 SSR을 끈다
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -19,6 +20,10 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [backtestOpen, setBacktestOpen] = useState(false);
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
+  // "이번 주 몇 곳 갈 수 있는가" — 이 값이 Top-N 경계를 정한다(§InspectionBudgetPanel).
+  const [budget, setBudget] = useState(10);
+  // 예산 범위에서 실제로 몇 %를 잡을 수 있는지는 **검증 데이터가 있을 때만** 표시한다.
+  const [expectedRecall, setExpectedRecall] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -26,13 +31,32 @@ export default function Home() {
       setSites(sitesData);
       setQueue(queueEnvelope.data.priority_queue);
       setError(null);
+
+      // 커버리지 곡선에서 현재 예산 비율에 해당하는 recall을 읽어온다 — 라벨이 없으면
+      // 곡선 자체가 비어 있어 null이 되고, 화면에도 아무 숫자를 만들어 쓰지 않는다.
+      try {
+        const backtest = await fetchBacktest(10);
+        const curve = backtest.data.coverage_curves?.proposed ?? [];
+        const total = queueEnvelope.data.priority_queue.length;
+        if (curve.length > 0 && total > 0) {
+          const targetPct = (budget / total) * 100;
+          const nearest = curve.reduce((best, p) =>
+            Math.abs(p.coverage_pct - targetPct) < Math.abs(best.coverage_pct - targetPct) ? p : best
+          );
+          setExpectedRecall(nearest.recall);
+        } else {
+          setExpectedRecall(null);
+        }
+      } catch {
+        setExpectedRecall(null); // 검증 정보는 부가 기능 — 실패해도 큐는 그대로 보여준다
+      }
     } catch (e) {
       setError(
         `API 서버(${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001"})에 연결할 수 없습니다. ` +
           `'python -m uvicorn api_server:app --port 8001'로 백엔드를 먼저 띄워주세요. (${e instanceof Error ? e.message : e})`
       );
     }
-  }, []);
+  }, [budget]);
 
   useEffect(() => {
     // reload()의 setState는 await 뒤(마이크로태스크)에서 일어나 실제로는 동기 호출이 아니지만,
@@ -73,12 +97,31 @@ export default function Home() {
       {error && <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div>}
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-72 shrink-0 overflow-y-auto border-r border-neutral-200 p-2">
-          <PriorityQueueList entries={queue} sites={sites} selectedSiteId={selectedSiteId} onSelectSite={setSelectedSiteId} />
+        <aside className="flex w-72 shrink-0 flex-col border-r border-neutral-200">
+          <InspectionBudgetPanel
+            entries={queue}
+            budget={budget}
+            onBudgetChange={setBudget}
+            expectedRecall={expectedRecall}
+          />
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <PriorityQueueList
+              entries={queue}
+              sites={sites}
+              selectedSiteId={selectedSiteId}
+              onSelectSite={setSelectedSiteId}
+              budget={budget}
+            />
+          </div>
         </aside>
 
         <main className="min-w-0 flex-1">
-          <MapView sites={sites} selectedSiteId={selectedSiteId} onSelectSite={setSelectedSiteId} />
+          <MapView
+            sites={sites}
+            selectedSiteId={selectedSiteId}
+            onSelectSite={setSelectedSiteId}
+            budgetSiteIds={queue.slice(0, budget).map((q) => q.site_id)}
+          />
         </main>
 
         {selectedSite && (

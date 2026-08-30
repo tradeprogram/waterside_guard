@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { fetchBacktest, type BacktestResult, type Envelope } from "@/lib/api";
+import CoverageCurveChart from "./CoverageCurveChart";
 
 // Module VERIFY(§ARCHITECTURE.md §5)의 GET /verify/backtest를 그대로 보여준다 — 이 화면이
 // 없으면 "예측 정확도가 어디 있나"라는 질문에 답할 방법이 없었다.
-const BASELINE_LABEL: Record<string, string> = { random: "무작위", proposed: "제안 모델(Module RISK)" };
+const BASELINE_LABEL: Record<string, string> = {
+  random: "무작위",
+  ndvi_only: "NDVI 이상도만",
+  recency: "마지막 점검일만",
+  proposed: "수변가드(다요인)",
+};
 
 function pct(v: number | null): string {
   return v != null ? `${Math.round(v * 100)}%` : "–";
@@ -46,7 +52,7 @@ export default function BacktestModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
@@ -95,6 +101,19 @@ export default function BacktestModal({ onClose }: { onClose: () => void }) {
                       <p className="text-2xl font-bold tabular-nums">{pct(data.recall_at_top20pct)}</p>
                       <p className="text-xs text-neutral-500">Recall@Top20%</p>
                     </div>
+                    <div className="flex-1 rounded bg-neutral-50 p-3 text-center">
+                      <p className="text-2xl font-bold tabular-nums">
+                        {data.lift_at_k != null ? `${data.lift_at_k}×` : "–"}
+                      </p>
+                      <p className="text-xs text-neutral-500">Lift@{data.precision_at_k.k} (무작위 대비)</p>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      점검 커버리지 대비 변화 발견율
+                    </h4>
+                    <CoverageCurveChart curves={data.coverage_curves} />
                   </div>
 
                   <table className="mb-4 w-full text-sm">

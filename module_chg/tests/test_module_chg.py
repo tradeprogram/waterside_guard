@@ -177,3 +177,46 @@ def test_changed_area_ratio_falls_back_to_approximation_when_real_value_missing(
     )
     assert result["changed_area_ratio_source"] == "approximated"
     assert result["changed_area_ratio"] == round(min(0.30 / 0.3, 1.0), 3)
+
+
+# --- 계절 정합 기준선 (2026-08-31) ---
+
+from module_chg.run import compute_seasonal_anomaly  # noqa: E402
+
+
+def test_seasonal_anomaly_flags_value_outside_historical_range():
+    """과거 3년 같은 계절 NDVI가 0.70 근처였는데 올해 0.40이면 정상범위를 크게 벗어난다."""
+    baseline = {"historical_median": 0.70, "historical_mad": 0.02, "years_used": 3}
+    result = compute_seasonal_anomaly(0.40, baseline)
+    assert result["robust_z"] < -3  # 3-sigma 밖
+    assert result["seasonal_anomaly_score"] == 1.0
+    assert result["years_used"] == 3
+
+
+def test_seasonal_anomaly_treats_normal_year_variation_as_normal():
+    """해마다 흔들리는 폭 안이면 이상도가 낮아야 한다 — 계절성 오탐 방어의 핵심."""
+    baseline = {"historical_median": 0.70, "historical_mad": 0.05, "years_used": 3}
+    result = compute_seasonal_anomaly(0.68, baseline)
+    assert abs(result["robust_z"]) < 1
+    assert result["seasonal_anomaly_score"] < 0.2
+
+
+def test_seasonal_anomaly_returns_none_when_baseline_too_thin():
+    """기준선 연도가 1년뿐이면 '정상 범위'를 말할 수 없으므로 None -> 호출부가 폴백한다."""
+    assert compute_seasonal_anomaly(0.40, {"historical_median": 0.70, "historical_mad": 0.02, "years_used": 1}) is None
+    assert compute_seasonal_anomaly(0.40, None) is None
+
+
+def test_seasonal_baseline_takes_priority_over_two_period_diff():
+    scenes_b = [{"indices": {"ndvi_mean": 0.70, "ndmi_mean": 0.30}, "cloud_cover_pct": 5.0}]
+    scenes_c = [{"indices": {"ndvi_mean": 0.40, "ndmi_mean": 0.28}, "cloud_cover_pct": 5.0}]
+    baseline = {"historical_median": 0.70, "historical_mad": 0.02, "years_used": 3}
+
+    with_seasonal = compute_change_from_scenes(scenes_b, scenes_c, seasonal_baseline=baseline)
+    without = compute_change_from_scenes(scenes_b, scenes_c)
+
+    assert with_seasonal["anomaly_method"] == "season_matched"
+    assert without["anomaly_method"] == "two_period_diff"
+    # 두 방식의 점수를 둘 다 남겨서 비교 가능해야 한다(어느 쪽을 썼는지 숨기지 않는다)
+    assert with_seasonal["two_period_anomaly_score"] == without["anomaly_score"]
+    assert with_seasonal["seasonal_anomaly"]["historical_median"] == 0.70

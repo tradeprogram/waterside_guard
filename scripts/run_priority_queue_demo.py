@@ -103,6 +103,8 @@ def main() -> None:
                 "adjacent_to_water": adjacent_to_water,
                 "changed_area_ratio_source": chg_result["data"].get("changed_area_ratio_source"),
                 "evidence_confidence_json": json.dumps(chg_result["data"].get("evidence_confidence"), ensure_ascii=False),
+                "anomaly_method": chg_result["data"].get("anomaly_method"),
+                "seasonal_anomaly_json": json.dumps(chg_result["data"].get("seasonal_anomaly"), ensure_ascii=False),
                 "chg_status": chg_result["status"],
                 "contributing_factors_json": json.dumps(risk_result["data"]["contributing_factors"], ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_obs["data"].get("scenes", []), ensure_ascii=False),

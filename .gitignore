@@ -12,3 +12,7 @@ node_modules/
 *.tiff
 .DS_Store
 data/processed/_*
+
+# 라벨링 후보는 재생성 가능하고 썸네일 URL이 만료되므로 커밋하지 않는다.
+# 판독 결과(reviewed_labels.json)는 Ground Truth라 반드시 커밋한다.
+data/labels/label_candidates.*

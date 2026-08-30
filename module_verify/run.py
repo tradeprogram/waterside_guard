@@ -47,6 +47,36 @@ def _recall_at_top_pct(ranking: list[tuple[str, float]], labels: dict[str, bool]
     return round(hits / positives_total, 3)
 
 
+COVERAGE_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+
+def _coverage_curve(ranking: list[tuple[str, float]], labels: dict[str, bool]) -> list[dict]:
+    """점검 가능 비율(상위 K%)별로 "실제 변화의 몇 %를 찾았는가"(recall)를 계산한다.
+
+    중간점검 리서치가 "공모전에서 이 그래프 하나가 강력하다"고 꼽은 지표 — 목표는
+    "정확도 몇 %"가 아니라 "전체의 상위 20%만 확인해서 실제 변화의 몇 %를 잡았는가"다.
+    무작위 랭킹이라면 상위 K%에서 recall도 대략 K%가 되므로, 곡선이 대각선 위로
+    볼록할수록 우선순위화가 실제로 작동한다는 뜻이다.
+    """
+    labeled = _labeled_ranking(ranking, labels)
+    positives_total = sum(1 for v in labels.values() if v)
+    if not labeled or positives_total == 0:
+        return []
+    curve = []
+    for pct in COVERAGE_STEPS:
+        n_top = max(1, round(len(labeled) * pct))
+        hits = sum(1 for sid, _ in labeled[:n_top] if labels[sid])
+        curve.append(
+            {
+                "coverage_pct": round(pct * 100),
+                "inspected_count": n_top,
+                "found_count": hits,
+                "recall": round(hits / positives_total, 3),
+            }
+        )
+    return curve
+
+
 def run(input: dict) -> dict:
     period = input.get("period")
     predictions = input.get("predictions")
@@ -70,7 +100,9 @@ def run(input: dict) -> dict:
             {
                 "precision_at_k": {"k": 0, "value": None},
                 "recall_at_top20pct": None,
+                "lift_at_k": None,
                 "baseline_comparison": [],
+                "coverage_curves": {},
                 "labeled_site_count": 0,
                 "positive_count": 0,
             },
@@ -104,11 +136,24 @@ def run(input: dict) -> dict:
     prec_k = _precision_at_k(proposed_ranking, labels, k)
     baseline_comparison.append({"baseline": "proposed", "precision_at_k": prec_k})
 
+    # Lift@K — 무작위 대비 몇 배인가. "정확도 80%"보다 "무작위보다 2.4배"가
+    # 운영적으로 훨씬 의미 있는 진술이다(§ 중간점검 리서치 KPI 표).
+    random_precision = positive_count / len(labels) if labels else 0
+    lift = round(prec_k / random_precision, 2) if (prec_k is not None and random_precision > 0) else None
+
+    # 각 baseline의 커버리지 곡선도 함께 — 제안 모델만 그리면 비교 대상이 없다.
+    coverage_curves = {"proposed": _coverage_curve(proposed_ranking, labels)}
+    for name, preds in (input.get("baseline_predictions") or {}).items():
+        ranking = [(p["site_id"], p.get("score") or 0) for p in preds if p.get("site_id")]
+        coverage_curves[name] = _coverage_curve(ranking, labels)
+
     return make_envelope(
         {
             "precision_at_k": {"k": k, "value": prec_k},
             "recall_at_top20pct": _recall_at_top_pct(proposed_ranking, labels, 0.2),
+            "lift_at_k": lift,
             "baseline_comparison": baseline_comparison,
+            "coverage_curves": coverage_curves,
             "labeled_site_count": len(labels),
             "positive_count": positive_count,
         },

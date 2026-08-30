@@ -17,11 +17,14 @@ export default function PriorityQueueList({
   sites,
   selectedSiteId,
   onSelectSite,
+  budget,
 }: {
   entries: PriorityQueueEntry[];
   sites: Site[];
   selectedSiteId: string | null;
   onSelectSite: (siteId: string) => void;
+  /** 이번 주 점검 가능 건수 — 이 순위를 넘어가는 항목은 흐리게 표시한다(§InspectionBudgetPanel). */
+  budget?: number;
 }) {
   const addrBySiteId = new Map(sites.map((s) => [s.site_id, s.addr]));
 
@@ -54,7 +57,7 @@ export default function PriorityQueueList({
                   e.site_id === selectedSiteId
                     ? "bg-neutral-800 text-white"
                     : "bg-neutral-100 hover:bg-neutral-200 text-neutral-900"
-                }`}
+                } ${budget != null && e.rank > budget ? "opacity-45" : ""}`}
               >
                 <span className="flex items-center gap-2">
                   <span className="w-6 shrink-0 text-xs font-semibold opacity-70">#{e.rank}</span>

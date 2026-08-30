@@ -10,7 +10,26 @@ from __future__ import annotations
 from common.envelope import error_envelope, make_envelope
 
 REQUIRED_FIELDS = ("site_id", "inspector_id", "inspected_at", "actual_anomaly_found")
-VALID_CATEGORIES = {"식생교란", "침수흔적", "불법이용", "이상없음", "기타"}
+
+# 2026-08-31: 중간점검 리서치 §Field Verification Loop의 taxonomy로 교체했다.
+# 예전 분류("식생교란/침수흔적/불법이용/이상없음/기타")는 훼손 여부만 구분해서, 오탐이 났을 때
+# *왜* 났는지(예초였는지, 계절 변화였는지)를 되짚을 수 없었다. 새 분류는 "변화는 있었지만
+# 훼손이 아닌" 경우(mowing_agriculture·natural_seasonal·restoration_work)를 따로 받아
+# false positive의 원인을 분석할 수 있게 한다 — 이게 향후 ML label의 기반이 된다.
+VALID_CATEGORIES = {
+    "vegetation_loss",
+    "bare_ground",
+    "construction_earthwork",
+    "flooding_water_level",
+    "mowing_agriculture",
+    "restoration_work",
+    "natural_seasonal",
+    "other",
+}
+
+# "판단 보류"를 actual_anomaly_found=false와 구분해 기록한다 — Backtest에서 보류는
+# 양성도 음성도 아니라 별도 취급해야 하는데, 불리언 하나로는 그 구분이 사라진다.
+VALID_VERDICTS = {"yes", "no", "uncertain"}
 
 
 def run(input: dict) -> dict:
@@ -21,6 +40,10 @@ def run(input: dict) -> dict:
     category = input.get("anomaly_category")
     if category is not None and category not in VALID_CATEGORIES:
         return error_envelope(f"anomaly_category '{category}'는 허용되지 않는 값입니다({VALID_CATEGORIES})", fallback_tier=3)
+
+    verdict = input.get("verdict")
+    if verdict is not None and verdict not in VALID_VERDICTS:
+        return error_envelope(f"verdict '{verdict}'는 허용되지 않는 값입니다({VALID_VERDICTS})", fallback_tier=3)
 
     site_id = input["site_id"]
     inspected_at = input["inspected_at"]

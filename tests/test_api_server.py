@@ -103,7 +103,7 @@ def test_create_inspection_updates_status():
         "inspector_id": "staff_003",
         "inspected_at": "2026-09-02T10:15:00+09:00",
         "actual_anomaly_found": True,
-        "anomaly_category": "식생교란",
+        "anomaly_category": "vegetation_loss",
         "note": "동측 사면 나지 노출 확인",
     }
     r = client.post("/inspections", json=payload)
@@ -130,7 +130,7 @@ def test_backtest_after_inspection_scores_it():
             "inspector_id": "staff_003",
             "inspected_at": "2026-09-02T10:15:00+09:00",
             "actual_anomaly_found": True,
-            "anomaly_category": "식생교란",
+            "anomaly_category": "vegetation_loss",
         },
     )
     r = client.get("/verify/backtest?k=1")

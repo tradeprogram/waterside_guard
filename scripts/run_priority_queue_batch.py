@@ -29,6 +29,7 @@ from module_agg.run import run as agg_run
 from module_chg.run import compute_change_from_scenes
 from module_obs.batch import run_batch, run_batch_sar
 from module_obs.pixel_diff import compute_changed_area_ratio_batch
+from module_obs.seasonal import fetch_seasonal_baseline_batch
 from module_obs.water import is_adjacent_to_water_batch
 from module_risk.run import run as risk_run
 
@@ -104,6 +105,11 @@ def main() -> None:
     water_by_site = is_adjacent_to_water_batch(sites_for_obs)
     print("Earth Engine 배치 조회 — 픽셀 단위 변화면적...")
     changed_area_ratio_by_site = compute_changed_area_ratio_batch(sites_for_obs, BASELINE_PERIOD, CURRENT_PERIOD)
+    # 같은 계절 과거 3년 기준선 — "지난달보다 떨어졌다"가 아니라 "같은 계절 정상범위를
+    # 벗어났다"고 말하기 위한 근거(§module_obs/seasonal.py).
+    print("Earth Engine 배치 조회 — 동일 계절 과거 3년 기준선...")
+    seasonal_result = fetch_seasonal_baseline_batch(sites_for_obs, as_of_date=CURRENT_PERIOD[1])
+    seasonal_by_site = seasonal_result["data"]["seasonal_baseline_by_site"]
 
     rows = []
     for site_id, meta in site_meta.items():
@@ -118,6 +124,7 @@ def main() -> None:
             current_sar_vv_mean=current_sar_by_site.get(site_id),
             real_changed_area_ratio=changed_area_ratio_by_site.get(site_id),
             recent_rainfall_mm=recent_rainfall_mm,
+            seasonal_baseline=seasonal_by_site.get(site_id),
         )
 
         if computed is None:
@@ -129,6 +136,8 @@ def main() -> None:
             sar_vv_delta = None
             weight_coverage = None
             evidence_confidence = None
+            anomaly_method = None
+            seasonal_anomaly = None
         else:
             agg_result = agg_run(
                 {
@@ -149,6 +158,8 @@ def main() -> None:
             sar_vv_delta = computed.get("sar_vv_delta")
             weight_coverage = risk_result["data"]["weight_coverage"]
             evidence_confidence = computed.get("evidence_confidence")
+            anomaly_method = computed.get("anomaly_method")
+            seasonal_anomaly = computed.get("seasonal_anomaly")
 
         rows.append(
             {
@@ -166,6 +177,8 @@ def main() -> None:
                 "adjacent_to_water": adjacent_to_water,
                 "changed_area_ratio_source": computed.get("changed_area_ratio_source") if computed else None,
                 "evidence_confidence_json": json.dumps(evidence_confidence, ensure_ascii=False),
+                "anomaly_method": anomaly_method,
+                "seasonal_anomaly_json": json.dumps(seasonal_anomaly, ensure_ascii=False),
                 "contributing_factors_json": json.dumps(contributing_factors, ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_scenes, ensure_ascii=False),
                 "current_scenes_json": json.dumps(current_scenes, ensure_ascii=False),

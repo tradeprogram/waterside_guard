@@ -31,6 +31,17 @@ export type PriorityQueueEntry = {
   status: "미점검" | "점검완료";
 };
 
+// module_chg/run.py compute_seasonal_anomaly()의 반환 구조 — 같은 계절 과거 N년 대비 위치.
+export type SeasonalAnomaly = {
+  robust_z: number;
+  seasonal_anomaly_score: number;
+  historical_median: number;
+  historical_mad: number;
+  years_used: number;
+  current_ndvi: number;
+  yearly?: { year: number; ndvi_median: number | null; scene_count: number }[];
+};
+
 // module_chg/confidence.py의 반환 구조 — level은 등급, factors는 그 등급이 나온 ± 사유 목록.
 export type EvidenceConfidence = {
   level: "높음" | "보통" | "낮음";
@@ -81,6 +92,8 @@ export function fetchEvidence(siteId: string) {
     weight_coverage: number | null;
     changed_area_ratio_source: "pixel_diff" | "approximated" | null;
     evidence_confidence: EvidenceConfidence | null;
+    anomaly_method: "season_matched" | "two_period_diff" | "sar_only" | null;
+    seasonal_anomaly: SeasonalAnomaly | null;
   }>(`/sites/${encodeURIComponent(siteId)}/evidence`);
 }
 
@@ -105,7 +118,10 @@ export async function postInspection(payload: {
   inspector_id: string;
   inspected_at: string;
   actual_anomaly_found: boolean;
+  // "판단 보류"를 actual_anomaly_found=false와 구분해 기록한다 — 오탐 분석에서 둘은 다른 사례다.
+  verdict?: "yes" | "no" | "uncertain";
   anomaly_category?: string;
+  photo_refs?: string[];
   note?: string;
 }) {
   const res = await fetch(`${API_BASE}/inspections`, {
@@ -118,10 +134,19 @@ export async function postInspection(payload: {
   return body as Envelope<{ site_id: string; inspection_id: string; status: string }>;
 }
 
+export type CoveragePoint = {
+  coverage_pct: number;
+  inspected_count: number;
+  found_count: number;
+  recall: number;
+};
+
 export type BacktestResult = {
   precision_at_k: { k: number; value: number | null };
   recall_at_top20pct: number | null;
+  lift_at_k: number | null;
   baseline_comparison: { baseline: string; precision_at_k: number | null }[];
+  coverage_curves: Record<string, CoveragePoint[]>;
   labeled_site_count: number;
   positive_count: number;
 };

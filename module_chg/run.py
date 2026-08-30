@@ -31,6 +31,13 @@ from module_obs.run import run as obs_run
 
 ANOMALY_THRESHOLD_FOR_CHANGE = 0.15  # |z-score 정규화 편차|가 이 값 이상이면 "유의미한 변화"로 본다(초기 가정치)
 SAR_VV_DELTA_NORMALIZATION_DB = 3.0  # |VV backscatter 변화|(dB)가 이 값이면 이상도 1.0으로 정규화(초기 가정치)
+ROBUST_Z_NORMALIZATION = 3.0  # robust z-score가 이 값이면 이상도 1.0(3-sigma 관행, 초기 가정치)
+# MAD 하한 — 단순히 0으로 나누는 걸 막는 값이 아니라 **센서 자체의 측정 노이즈**다.
+# Sentinel-2 NDVI는 대기보정·BRDF·관측각 차이로 대략 ±0.02~0.05의 불확실성이 있어서,
+# 그보다 미세한 차이를 "정상범위를 벗어났다"고 주장하면 과잉해석이 된다. 실측(용인 유방동)에서
+# 동일계절 3년 MAD가 0.009까지 작게 나오는데, 이걸 그대로 쓰면 0.05 변화도 3.7-sigma가 돼
+# 대부분의 site가 최대점으로 포화되고 우선순위 변별력이 사라진다(2026-08-31 확인).
+MIN_MAD_FLOOR = 0.03
 
 
 def _mean(values: list[float | None]) -> float | None:
@@ -61,6 +68,39 @@ def _sar_anomaly(sar_vv_delta: float | None) -> float | None:
     return round(min(abs(sar_vv_delta) / SAR_VV_DELTA_NORMALIZATION_DB, 1.0), 3)
 
 
+def compute_seasonal_anomaly(current_ndvi: float | None, seasonal_baseline: dict | None) -> dict | None:
+    """현재 NDVI가 **같은 계절 과거 N년의 정상 범위**에서 얼마나 벗어났는지(robust z-score).
+
+    기존 anomaly_score가 "기준기간 평균과 얼마나 다른가"였다면, 이건 "그 차이가 해마다
+    있는 자연스러운 흔들림 범위 안인가, 밖인가"를 본다 — 계절성·연도별 기후 변동을
+    통제하는 지점이다(§module_obs/seasonal.py).
+
+    MAD 기반이라 과거 한 해가 이상해도 기준선이 통째로 흔들리지 않는다. 기준선 연도가
+    부족하면(§MIN_YEARS_FOR_BASELINE) None을 반환해 호출부가 기존 방식으로 폴백하게 한다.
+    """
+    if current_ndvi is None or not seasonal_baseline:
+        return None
+    median = seasonal_baseline.get("historical_median")
+    mad = seasonal_baseline.get("historical_mad")
+    years_used = seasonal_baseline.get("years_used", 0)
+    if median is None or mad is None or years_used < 2:
+        return None
+
+    # 1.4826은 정규분포에서 MAD를 표준편차로 환산하는 관행적 상수다.
+    scale = max(1.4826 * mad, MIN_MAD_FLOOR)
+    robust_z = (current_ndvi - median) / scale
+    return {
+        "robust_z": round(robust_z, 3),
+        "seasonal_anomaly_score": round(min(abs(robust_z) / ROBUST_Z_NORMALIZATION, 1.0), 3),
+        "historical_median": median,
+        "historical_mad": mad,
+        "years_used": years_used,
+        "current_ndvi": round(current_ndvi, 4),
+        # 화면이 연도별 점을 찍을 수 있게 원자료도 함께 넘긴다(§ui/SeasonalBaselineChart.tsx)
+        "yearly": seasonal_baseline.get("yearly", []),
+    }
+
+
 def compute_change_from_scenes(
     baseline_scenes: list[dict],
     current_scenes: list[dict],
@@ -68,6 +108,7 @@ def compute_change_from_scenes(
     current_sar_vv_mean: float | None = None,
     real_changed_area_ratio: float | None = None,
     recent_rainfall_mm: float | None = None,
+    seasonal_baseline: dict | None = None,
 ) -> dict | None:
     """순수 함수 — Module OBS가 이미 반환한 scene 리스트(+SAR 평균)만으로 anomaly_score
     등을 계산한다. OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이
@@ -104,6 +145,9 @@ def compute_change_from_scenes(
             "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
             "change_type_hint": "possible_change_sar_only",
             "source": "observed_sar_fallback",
+            "anomaly_method": "sar_only",
+            "seasonal_anomaly": None,
+            "two_period_anomaly_score": None,
             "signal_variability": None,
             "evidence_confidence": compute_evidence_confidence(
                 baseline_scenes,
@@ -127,7 +171,13 @@ def compute_change_from_scenes(
     ndmi_delta = (current_ndmi - baseline_ndmi) if (current_ndmi is not None and baseline_ndmi is not None) else None
 
     magnitude = max(abs(ndvi_delta or 0.0), abs(ndmi_delta or 0.0))
-    anomaly_score = round(min(magnitude / 0.5, 1.0), 3)  # 0.5 편차를 사실상 최대치로 정규화(초기 가정치, Backtest A로 보정)
+    two_period_score = round(min(magnitude / 0.5, 1.0), 3)  # 두 기간 차분 방식(계절 기준선이 없을 때의 폴백)
+
+    # 계절 정합 기준선이 있으면 그쪽을 우선한다 — "지난 N년 같은 계절의 정상 범위를
+    # 벗어났는가"가 "두 기간이 다른가"보다 훨씬 방어력이 높다(§compute_seasonal_anomaly).
+    seasonal = compute_seasonal_anomaly(current_ndvi, seasonal_baseline)
+    anomaly_score = seasonal["seasonal_anomaly_score"] if seasonal else two_period_score
+    anomaly_method = "season_matched" if seasonal else "two_period_diff"
     approximated_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — real_changed_area_ratio가 없을 때만 씀
     changed_area_ratio = round(real_changed_area_ratio, 4) if real_changed_area_ratio is not None else approximated_ratio
 
@@ -145,6 +195,10 @@ def compute_change_from_scenes(
         "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
         "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
         "source": "observed",
+        # 이상도를 어떤 방식으로 냈는지 항상 명시 — 계절 기준선 확보 여부에 따라 달라진다.
+        "anomaly_method": anomaly_method,
+        "seasonal_anomaly": seasonal,
+        "two_period_anomaly_score": two_period_score,
         "signal_variability": signal_variability,
         "evidence_confidence": compute_evidence_confidence(
             baseline_scenes,
@@ -205,6 +259,20 @@ def run(input: dict) -> dict:
     except Exception as e:  # noqa: BLE001
         warnings.append(f"[{aoi_id}] 픽셀 단위 변화면적 계산 실패, 근사치로 대체: {e}")
 
+    # 동일 계절 과거 N년 기준선 — 호출부가 미리 넘겼으면 그걸 쓰고, 없으면 여기서 조회한다
+    # (배치 파이프라인은 site 전체를 한 번에 받아 넘기므로 재조회하지 않는다).
+    seasonal_baseline = input.get("seasonal_baseline")
+    if seasonal_baseline is None:
+        try:
+            from module_obs.seasonal import fetch_seasonal_baseline_batch
+
+            result = fetch_seasonal_baseline_batch(
+                [{"site_id": aoi_id, "geometry_4326": geometry_4326}], as_of_date=current_period[1]
+            )
+            seasonal_baseline = result["data"]["seasonal_baseline_by_site"].get(aoi_id)
+        except Exception as e:  # noqa: BLE001
+            warnings.append(f"[{aoi_id}] 계절 기준선 조회 실패, 두 기간 차분으로 대체: {e}")
+
     computed = compute_change_from_scenes(
         baseline_scenes,
         current_scenes,
@@ -212,6 +280,7 @@ def run(input: dict) -> dict:
         current_sar_vv_mean=current_obs["data"].get("sar_vv_mean"),
         real_changed_area_ratio=real_changed_area_ratio,
         recent_rainfall_mm=recent_rainfall_mm,
+        seasonal_baseline=seasonal_baseline,
     )
     if computed is None:
         warnings.append(f"[{aoi_id}] 기준기간 또는 현재기간에 유효 관측이 없어 변화탐지를 건너뜁니다.")
@@ -223,6 +292,9 @@ def run(input: dict) -> dict:
                 "changed_area_ratio_source": None,
                 "change_type_hint": "no_significant_change",
                 "source": "observed",
+                "anomaly_method": None,
+                "seasonal_anomaly": None,
+                "two_period_anomaly_score": None,
                 "signal_variability": None,
                 "evidence_confidence": None,
                 "sar_vv_delta": None,

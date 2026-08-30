@@ -7,6 +7,7 @@ import InspectionForm from "./InspectionForm";
 import NdviThumbnails from "./NdviThumbnails";
 import ScoreBreakdown from "./ScoreBreakdown";
 import EvidenceConfidence from "./EvidenceConfidence";
+import SeasonalBaselineChart from "./SeasonalBaselineChart";
 
 export default function EvidencePanel({ site, onInspectionSubmitted }: { site: Site; onInspectionSubmitted: () => void }) {
   const [timeseries, setTimeseries] = useState<{ baseline_scenes: Scene[]; current_scenes: Scene[] } | null>(null);
@@ -57,6 +58,8 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
           </p>
         )}
       </div>
+
+      <SeasonalBaselineChart seasonal={evidence?.seasonal_anomaly ?? null} />
 
       <EvidenceConfidence confidence={evidence?.evidence_confidence ?? null} />
 

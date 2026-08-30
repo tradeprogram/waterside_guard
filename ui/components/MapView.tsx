@@ -56,10 +56,13 @@ export default function MapView({
   sites,
   selectedSiteId,
   onSelectSite,
+  budgetSiteIds = [],
 }: {
   sites: Site[];
   selectedSiteId: string | null;
   onSelectSite: (siteId: string) => void;
+  /** 이번 주 점검 예산 안에 드는 site — 지도에서 테두리로 구분한다(§InspectionBudgetPanel). */
+  budgetSiteIds?: string[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -153,8 +156,10 @@ export default function MapView({
           paint: {
             "circle-radius": ["case", ["get", "selected"], 10, 6],
             "circle-color": ["get", "color"],
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#ffffff",
+            // 예산 안에 드는 대상지는 굵은 흰 테두리로 "이번 주에 갈 곳"임을 구분한다
+            "circle-stroke-width": ["case", ["get", "inBudget"], 3, 1],
+            "circle-stroke-color": ["case", ["get", "inBudget"], "#ffffff", "#d4d4d4"],
+            "circle-opacity": ["case", ["get", "inBudget"], 1, 0.5],
           },
         });
 
@@ -217,6 +222,8 @@ export default function MapView({
       const pointSource = map.getSource("sites-points") as GeoJSONSource | undefined;
       if (!source || !pointSource) return;
 
+      const budgetSet = new Set(budgetSiteIds);
+
       const features = sites
         .filter((s) => s.geometry_geojson)
         .map((s) => ({
@@ -227,6 +234,7 @@ export default function MapView({
             inspection_priority_score: s.inspection_priority_score,
             color: TIER_COLOR[s.priority_tier ?? "정상"] ?? "#999999",
             selected: s.site_id === selectedSiteId,
+            inBudget: budgetSet.has(s.site_id),
           },
         }));
       source.setData({ type: "FeatureCollection", features });
@@ -261,7 +269,7 @@ export default function MapView({
     };
 
     return waitForSource(map, "sites", render);
-  }, [sites, selectedSiteId]);
+  }, [sites, selectedSiteId, budgetSiteIds]);
 
   // 대상지를 선택하면: (1) 실제 NDVI 위성 이미지를 그 위치에 얹고 (2) 알아볼 수 있게 확대한다.
   // 대상지 폴리곤 자체가 수백 m²로 작아서, 60개 전체를 보던 줌 레벨에서는 선택해도 안 보인다.
