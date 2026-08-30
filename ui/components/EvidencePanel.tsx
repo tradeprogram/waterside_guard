@@ -10,6 +10,7 @@ import ScoreBreakdown from "./ScoreBreakdown";
 import EvidenceConfidence from "./EvidenceConfidence";
 import SeasonalBaselineChart from "./SeasonalBaselineChart";
 import SiteTimeline from "./SiteTimeline";
+import { TIER_BADGE } from "@/lib/tiers";
 
 // module_chg/run.py _classify_change()가 내는 값 — 화면에 원문 그대로 노출되면 안 된다.
 // 단정하지 않는 표현으로 옮긴다(§3.4 종 판독 금지: 무엇이 훼손됐는지 판정하지 않는다).
@@ -18,13 +19,6 @@ const CHANGE_HINT_LABEL: Record<string, string> = {
   moisture_increase: "습윤도 증가",
   bare_ground_increase: "나지 증가 경향",
   possible_change_sar_only: "레이더 단독 변화 신호",
-};
-
-const TIER_STYLE: Record<string, { bg: string; fg: string }> = {
-  "1순위": { bg: "rgba(192,57,43,0.12)", fg: "var(--tier-1)" },
-  "2순위": { bg: "rgba(230,126,34,0.14)", fg: "#b8621a" },
-  "3순위": { bg: "rgba(212,160,23,0.16)", fg: "#8a6508" },
-  정상: { bg: "rgba(91,140,110,0.14)", fg: "var(--ok)" },
 };
 
 /** 점검 이력 한 건을 사람이 읽는 문장으로 — 이전에는 원본 JSON이 그대로 노출돼 있었다. */
@@ -63,7 +57,7 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
     };
   }, [site.site_id]);
 
-  const tierStyle = site.priority_tier ? TIER_STYLE[site.priority_tier] : null;
+  const tierStyle = site.priority_tier ? TIER_BADGE[site.priority_tier] : null;
 
   return (
     <div className="scroll-thin flex h-full flex-col gap-4 overflow-y-auto p-4">

@@ -109,6 +109,21 @@ body {
 }
 
 /* ── 컨트롤 ──────────────────────────────────────────────────────── */
+/* 떠 있는 AI 버튼 — 위성영상 위에 놓이므로 흰 유리 + 청록 글자로 대비를 만든다 */
+.glass-fab {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(231, 244, 246, 0.72));
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(111, 183, 190, 0.65);
+  color: var(--brand);
+  box-shadow: 0 8px 24px rgba(39, 68, 82, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.glass-fab:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(231, 244, 246, 0.85));
+  border-color: var(--accent);
+}
+
 .pill {
   border-radius: 999px;
   transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
@@ -202,6 +217,68 @@ body {
 
 .scroll-thin::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ── 인쇄(PDF 저장) ───────────────────────────────────────────────
+   외부 PDF 라이브러리를 넣지 않고 브라우저의 "PDF로 저장"을 쓴다. 보고서 오버레이가
+   앱 껍데기(.app-shell)의 형제로 렌더되기 때문에(app/page.tsx) 껍데기만 숨기면 된다 —
+   조상이 숨겨지면 후손도 함께 사라지므로 형제 관계가 전제다. */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  .app-shell,
+  .no-print {
+    display: none !important;
+  }
+
+  .report-overlay {
+    position: static !important;
+    overflow: visible !important;
+    background: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .report-overlay > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  /* 유리 재질은 화면 전용 — 인쇄물에서는 흰 종이에 검은 글씨여야 한다 */
+  .report-doc {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #fff !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .page-break {
+    break-before: page;
+  }
+
+  .avoid-break,
+  table,
+  tr {
+    break-inside: avoid;
+  }
+
+  /* 등급 색·막대가 빠지면 보고서를 읽을 수 없다 — 배경 그래픽을 강제로 인쇄한다 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }
 
 /* MapLibre 기본 컨트롤을 앱 톤에 맞춘다 */

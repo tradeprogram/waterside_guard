@@ -1,15 +1,7 @@
 "use client";
 
 import type { PriorityQueueEntry, Site } from "@/lib/api";
-
-// 등급별 색 — globals.css의 --tier-* 와 같은 값이어야 한다. 브랜드 청록으로 물들이지 않는다:
-// 1순위와 3순위가 비슷해 보이는 순간 목록으로서 기능을 잃는다.
-const TIER_COLOR: Record<string, string> = {
-  "1순위": "var(--tier-1)",
-  "2순위": "var(--tier-2)",
-  "3순위": "var(--tier-3)",
-  정상: "var(--tier-normal)",
-};
+import { TIER_COLOR } from "@/lib/tiers";
 
 // addr(예: "경기도 여주시 대신면 양촌리 369-5")에서 "시군구 읍면동"만 뽑아 그룹 키로 쓴다.
 // PNU 기반 주소는 항상 [시/도, 시/군/구, 읍/면/동, 리, 지번] 순서라 토큰 인덱스로 충분하고,
@@ -81,17 +73,22 @@ export default function PriorityQueueList({
                   key={e.site_id}
                   onClick={() => onSelectSite(e.site_id)}
                   aria-current={selected ? "true" : undefined}
-                  className={`group flex items-center gap-2 rounded-md py-1.5 pl-0 pr-2 text-left transition ${
+                  className={`group flex items-center gap-2 rounded-md py-1.5 pl-1 pr-2 text-left transition ${
                     selected ? "text-white shadow-sm" : "text-ink hover:bg-black/[0.045]"
                   } ${outOfBudget ? "opacity-45" : ""}`}
                   style={selected ? { background: "linear-gradient(135deg, var(--brand), var(--brand-2))" } : undefined}
                 >
-                  {/* 등급 색 띠 — 선택 상태에서도 등급이 사라지지 않도록 항상 왼쪽에 둔다 */}
-                  <span
-                    className="h-8 w-1 shrink-0 rounded-r"
-                    style={{ background: tier ? TIER_COLOR[tier] ?? "var(--ink-3)" : "var(--line-strong)" }}
-                    aria-hidden
-                  />
+                  {/* 등급 표시 점 — 선택 상태에서도 등급이 사라지지 않도록 항상 왼쪽에 둔다.
+                      선택 시 배경이 청록이라 흰 링을 둘러 점이 묻히지 않게 한다. */}
+                  <span className="flex w-4 shrink-0 justify-center" aria-hidden>
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{
+                        background: tier ? TIER_COLOR[tier] ?? "var(--ink-3)" : "var(--line-strong)",
+                        boxShadow: selected ? "0 0 0 1.5px rgba(255,255,255,0.9)" : "none",
+                      }}
+                    />
+                  </span>
                   <span
                     className={`w-6 shrink-0 text-right text-[11px] font-semibold ${selected ? "text-white/75" : "text-ink-3"}`}
                   >

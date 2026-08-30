@@ -161,7 +161,9 @@ def test_weekly_report_falls_back_to_template_without_gemini_key(monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "degraded"
-    assert "전체 대상지" in body["data"]["report_text"]
+    # 템플릿 폴백임을 확인 — 문구가 바뀌어도 깨지지 않게 어휘 규칙(필지 단위)만 검사한다
+    assert "점검 대상" in body["data"]["report_text"]
+    assert "필지" in body["data"]["report_text"]
 
 
 def test_create_inspection_invalid_category_rejected():

@@ -125,7 +125,7 @@ export default function AgentChatWidget({ siteId, siteLabel }: { siteId: string 
   return (
     <>
       {open && (
-        <div className="glass fixed bottom-24 right-6 z-50 flex h-[32rem] w-[23rem] flex-col overflow-hidden">
+        <div className="no-print glass fixed bottom-24 right-6 z-50 flex h-[32rem] w-[23rem] flex-col overflow-hidden">
           {siteId ? (
             <ChatThread key={siteId} siteId={siteId} siteLabel={siteLabel ?? siteId} />
           ) : (
@@ -145,11 +145,9 @@ export default function AgentChatWidget({ siteId, siteLabel }: { siteId: string 
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "AI 근거 조회 닫기" : "AI 근거 조회 열기"}
         aria-expanded={open}
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full text-sm font-bold text-white transition hover:scale-105"
-        style={{
-          background: "linear-gradient(135deg, var(--brand), var(--brand-2))",
-          boxShadow: "0 8px 24px rgba(39,112,134,0.38)",
-        }}
+        // 유리 재질 버튼 — 위성지도(어두운 영상) 위에 떠 있으므로 흰 유리에 청록 글자·테두리로
+        // 대비를 만든다. 불투명 청록 원보다 화면을 덜 가리면서도 눈에 띈다.
+        className="no-print glass-fab fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full text-sm font-bold transition hover:scale-105"
       >
         {open ? (
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">

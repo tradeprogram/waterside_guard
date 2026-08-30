@@ -88,95 +88,99 @@ export default function Home() {
   const uninspected = queue.filter((q) => q.status === "미점검").length;
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-bg text-ink">
-      <header className="glass-bar z-30 flex shrink-0 items-center justify-between px-5 py-2.5">
-        <div className="flex items-center gap-3">
-          {/* 브랜드 마크 — 수변(물결)과 보호(방패)를 겹친 형태 */}
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-lg shadow-sm"
-            style={{ background: "linear-gradient(135deg, var(--brand), var(--brand-2))" }}
-            aria-hidden
+    <>
+      {/* 인쇄할 때 이 껍데기만 숨기면 보고서만 남는다 — 그래서 모달·AI 버튼을 형제로 둔다
+          (조상이 display:none이면 후손도 함께 사라지므로 자식으로 두면 인쇄가 백지가 된다). */}
+      <div className="app-shell flex h-screen w-screen flex-col bg-bg text-ink">
+        <header className="glass-bar z-30 flex shrink-0 items-center justify-between px-5 py-2.5">
+          <div className="flex items-center gap-3">
+            {/* 브랜드 마크 — 수변(물결)과 보호(방패)를 겹친 형태 */}
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-lg shadow-sm"
+              style={{ background: "linear-gradient(135deg, var(--brand), var(--brand-2))" }}
+              aria-hidden
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="#fff" strokeWidth={1.9}>
+                <path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6l7-3z" strokeLinejoin="round" />
+                <path d="M8 12.5c1-1 2-1 3 0s2 1 3 0" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div>
+              <h1 className="text-[15px] font-bold leading-tight tracking-tight">수변가드 AI</h1>
+              <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 점검 우선순위 지원시스템</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="mr-1 hidden items-center gap-3 text-[11px] text-ink-3 sm:flex">
+              <span>
+                점검대상 <strong className="font-semibold text-ink-2">{queue.length}</strong>필지
+              </span>
+              <span className="h-3 w-px bg-line" aria-hidden />
+              <span>
+                미점검 <strong className="font-semibold text-warn">{uninspected}</strong>필지
+              </span>
+            </div>
+            <button onClick={() => setBacktestOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
+              예측 성능 검증
+            </button>
+            <button onClick={() => setWeeklyReportOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
+              주간 점검현황
+            </button>
+          </div>
+        </header>
+
+        {error && (
+          <div
+            className="shrink-0 px-5 py-2 text-sm"
+            style={{ background: "var(--danger-soft)", color: "var(--danger)", borderBottom: "1px solid var(--line)" }}
+            role="alert"
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="#fff" strokeWidth={1.9}>
-              <path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6l7-3z" strokeLinejoin="round" />
-              <path d="M8 12.5c1-1 2-1 3 0s2 1 3 0" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div>
-            <h1 className="text-[15px] font-bold leading-tight tracking-tight">수변가드 AI</h1>
-            <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 점검 우선순위 지원시스템</p>
+            {error}
           </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2">
-          <div className="mr-1 hidden items-center gap-3 text-[11px] text-ink-3 sm:flex">
-            <span>
-              점검대상 <strong className="font-semibold text-ink-2">{queue.length}</strong>필지
-            </span>
-            <span className="h-3 w-px bg-line" aria-hidden />
-            <span>
-              미점검 <strong className="font-semibold text-warn">{uninspected}</strong>필지
-            </span>
-          </div>
-          <button onClick={() => setBacktestOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
-            예측 성능 검증
-          </button>
-          <button onClick={() => setWeeklyReportOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
-            주간 점검현황
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div
-          className="shrink-0 px-5 py-2 text-sm"
-          style={{ background: "var(--danger-soft)", color: "var(--danger)", borderBottom: "1px solid var(--line)" }}
-          role="alert"
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <aside className="glass flex w-[19rem] shrink-0 flex-col overflow-hidden">
-          <InspectionBudgetPanel
-            entries={queue}
-            budget={budget}
-            onBudgetChange={setBudget}
-            expectedRecall={expectedRecall}
-          />
-          <RoutePanel route={route} />
-          <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">
-            <PriorityQueueList
+        <div className="flex min-h-0 flex-1 gap-2 p-2">
+          <aside className="glass flex w-[19rem] shrink-0 flex-col overflow-hidden">
+            <InspectionBudgetPanel
               entries={queue}
+              budget={budget}
+              onBudgetChange={setBudget}
+              expectedRecall={expectedRecall}
+            />
+            <RoutePanel route={route} />
+            <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">
+              <PriorityQueueList
+                entries={queue}
+                sites={sites}
+                selectedSiteId={selectedSiteId}
+                onSelectSite={setSelectedSiteId}
+                budget={budget}
+              />
+            </div>
+          </aside>
+
+          <main className="glass min-w-0 flex-1 overflow-hidden">
+            <MapView
               sites={sites}
               selectedSiteId={selectedSiteId}
               onSelectSite={setSelectedSiteId}
-              budget={budget}
+              budgetSiteIds={queue.slice(0, budget).map((q) => q.site_id)}
+              routeStops={route?.clusters.flatMap((c) => c.stops) ?? []}
             />
-          </div>
-        </aside>
+          </main>
 
-        <main className="glass min-w-0 flex-1 overflow-hidden">
-          <MapView
-            sites={sites}
-            selectedSiteId={selectedSiteId}
-            onSelectSite={setSelectedSiteId}
-            budgetSiteIds={queue.slice(0, budget).map((q) => q.site_id)}
-            routeStops={route?.clusters.flatMap((c) => c.stops) ?? []}
-          />
-        </main>
-
-        {selectedSite && (
-          <aside className="glass w-[25rem] shrink-0 overflow-hidden">
-            <EvidencePanel site={selectedSite} onInspectionSubmitted={reload} />
-          </aside>
-        )}
+          {selectedSite && (
+            <aside className="glass w-[25rem] shrink-0 overflow-hidden">
+              <EvidencePanel site={selectedSite} onInspectionSubmitted={reload} />
+            </aside>
+          )}
+        </div>
       </div>
 
       <AgentChatWidget siteId={selectedSiteId} siteLabel={selectedSite?.addr ?? selectedSite?.site_id ?? null} />
       {backtestOpen && <BacktestModal onClose={() => setBacktestOpen(false)} />}
-      {weeklyReportOpen && <WeeklyReportModal onClose={() => setWeeklyReportOpen(false)} />}
-    </div>
+      {weeklyReportOpen && <WeeklyReportModal budget={budget} onClose={() => setWeeklyReportOpen(false)} />}
+    </>
   );
 }

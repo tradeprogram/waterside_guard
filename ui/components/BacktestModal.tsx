@@ -61,7 +61,7 @@ export default function BacktestModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="no-print fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(26,29,33,0.42)", backdropFilter: "blur(3px)" }}
       onClick={onClose}
     >
