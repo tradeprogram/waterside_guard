@@ -26,6 +26,7 @@ import statistics
 
 from common.envelope import error_envelope, make_envelope
 from common.geo import geometry_5179_to_4326
+from module_chg.confidence import compute_evidence_confidence
 from module_obs.run import run as obs_run
 
 ANOMALY_THRESHOLD_FOR_CHANGE = 0.15  # |z-score 정규화 편차|가 이 값 이상이면 "유의미한 변화"로 본다(초기 가정치)
@@ -66,6 +67,7 @@ def compute_change_from_scenes(
     baseline_sar_vv_mean: float | None = None,
     current_sar_vv_mean: float | None = None,
     real_changed_area_ratio: float | None = None,
+    recent_rainfall_mm: float | None = None,
 ) -> dict | None:
     """순수 함수 — Module OBS가 이미 반환한 scene 리스트(+SAR 평균)만으로 anomaly_score
     등을 계산한다. OBS를 부르지 않는다. `run()`(단일 site)과 배치 파이프라인(`scripts/`)이
@@ -79,6 +81,9 @@ def compute_change_from_scenes(
     `real_changed_area_ratio`는 호출부가 `module_obs/pixel_diff.py`로 미리 계산해 넘기는
     실제 픽셀 단위 값이다(이 함수 자체는 여전히 GEE를 부르지 않는 순수 함수로 남긴다) —
     주어지면 그걸 쓰고, 없으면(GEE 실패 등) 기존 이상도 근사치로 폴백한다.
+
+    `recent_rainfall_mm`은 증거 신뢰도 판정에만 쓴다(§module_chg/confidence.py) — 강우 직후의
+    습윤 신호는 훼손이 아니라 기상 현상일 수 있으므로 신뢰도를 깎는 confounder로 취급한다.
     """
     has_optical = bool(baseline_scenes) and bool(current_scenes)
 
@@ -99,7 +104,16 @@ def compute_change_from_scenes(
             "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
             "change_type_hint": "possible_change_sar_only",
             "source": "observed_sar_fallback",
-            "confidence_interval": None,
+            "signal_variability": None,
+            "evidence_confidence": compute_evidence_confidence(
+                baseline_scenes,
+                current_scenes,
+                ndvi_delta=None,
+                ndmi_delta=None,
+                sar_vv_delta=sar_vv_delta,
+                changed_area_ratio_source="pixel_diff" if real_changed_area_ratio is not None else "approximated",
+                recent_rainfall_mm=recent_rainfall_mm,
+            ),
             "sar_vv_delta": round(sar_vv_delta, 3),
             "sar_anomaly": sar_anomaly,
         }
@@ -117,11 +131,13 @@ def compute_change_from_scenes(
     approximated_ratio = round(min(magnitude / 0.3, 1.0), 3)  # scene 평균 이상도로부터의 근사치 — real_changed_area_ratio가 없을 때만 씀
     changed_area_ratio = round(real_changed_area_ratio, 4) if real_changed_area_ratio is not None else approximated_ratio
 
+    # 통계적 신뢰구간이 아니라 "현재기간 장면들 사이의 흔들림 폭"이다 — 이름을
+    # confidence_interval로 두면 95% CI냐는 공격을 받는다(2026-08-31 명칭 정리).
     ndvi_values = [s["indices"].get("ndvi_mean") for s in current_scenes if s["indices"].get("ndvi_mean") is not None]
-    ci: list[float] | None = None
+    signal_variability: list[float] | None = None
     if len(ndvi_values) >= 2:
         stdev = statistics.pstdev(ndvi_values)
-        ci = [round(anomaly_score - stdev, 3), round(anomaly_score + stdev, 3)]
+        signal_variability = [round(anomaly_score - stdev, 3), round(anomaly_score + stdev, 3)]
 
     return {
         "anomaly_score": anomaly_score,
@@ -129,7 +145,16 @@ def compute_change_from_scenes(
         "changed_area_ratio_source": "pixel_diff" if real_changed_area_ratio is not None else "approximated",
         "change_type_hint": _classify_change(ndvi_delta, ndmi_delta),
         "source": "observed",
-        "confidence_interval": ci,
+        "signal_variability": signal_variability,
+        "evidence_confidence": compute_evidence_confidence(
+            baseline_scenes,
+            current_scenes,
+            ndvi_delta=ndvi_delta,
+            ndmi_delta=ndmi_delta,
+            sar_vv_delta=sar_vv_delta,
+            changed_area_ratio_source="pixel_diff" if real_changed_area_ratio is not None else "approximated",
+            recent_rainfall_mm=recent_rainfall_mm,
+        ),
         "sar_vv_delta": round(sar_vv_delta, 3) if sar_vv_delta is not None else None,
         "sar_anomaly": sar_anomaly,
     }
@@ -140,6 +165,7 @@ def run(input: dict) -> dict:
     site_geometry_5179 = input.get("site_geometry_5179")
     baseline_period = input.get("baseline_period")
     current_period = input.get("current_period")
+    recent_rainfall_mm = input.get("recent_rainfall_mm")  # 선택 — 증거 신뢰도의 기상 confounder 판정용
 
     if not site_geometry_5179 or not baseline_period or not current_period:
         return error_envelope(
@@ -185,6 +211,7 @@ def run(input: dict) -> dict:
         baseline_sar_vv_mean=baseline_obs["data"].get("sar_vv_mean"),
         current_sar_vv_mean=current_obs["data"].get("sar_vv_mean"),
         real_changed_area_ratio=real_changed_area_ratio,
+        recent_rainfall_mm=recent_rainfall_mm,
     )
     if computed is None:
         warnings.append(f"[{aoi_id}] 기준기간 또는 현재기간에 유효 관측이 없어 변화탐지를 건너뜁니다.")
@@ -196,7 +223,8 @@ def run(input: dict) -> dict:
                 "changed_area_ratio_source": None,
                 "change_type_hint": "no_significant_change",
                 "source": "observed",
-                "confidence_interval": None,
+                "signal_variability": None,
+                "evidence_confidence": None,
                 "sar_vv_delta": None,
                 "sar_anomaly": None,
             },

@@ -14,8 +14,8 @@ def _seed_store():
     store.reset()
     store.upsert_risk_result(
         "A1037",
-        risk_score=54,
-        risk_tier="2순위",
+        inspection_priority_score=54,
+        priority_tier="2순위",
         contributing_factors=[{"factor": "anomaly_score_mean", "value": 0.72, "weight": 0.35}],
         extra={
             "pnu": "4146110500100780003",
@@ -55,14 +55,14 @@ def test_get_site_404():
 def test_get_site_found():
     r = client.get("/sites/A1037")
     assert r.status_code == 200
-    assert r.json()["risk_score"] == 54
+    assert r.json()["inspection_priority_score"] == 54
 
 
 def test_evidence():
     r = client.get("/sites/A1037/evidence")
     assert r.status_code == 200
     body = r.json()
-    assert body["risk_tier"] == "2순위"
+    assert body["priority_tier"] == "2순위"
     assert body["contributing_factors"][0]["factor"] == "anomaly_score_mean"
 
 

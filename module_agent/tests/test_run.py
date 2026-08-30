@@ -11,8 +11,8 @@ def _reset_store():
     store.reset()
     store.upsert_risk_result(
         "A1037",
-        risk_score=54,
-        risk_tier="2순위",
+        inspection_priority_score=54,
+        priority_tier="2순위",
         contributing_factors=[{"factor": "anomaly_score_mean", "value": 0.72, "weight": 0.35}],
         extra={"anomaly_score": 0.72, "change_type_hint": "vegetation_decline"},
     )

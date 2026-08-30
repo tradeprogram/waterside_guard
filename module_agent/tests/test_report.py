@@ -9,8 +9,8 @@ from module_o.store import store
 @pytest.fixture(autouse=True)
 def _reset_store():
     store.reset()
-    store.upsert_risk_result("A", risk_score=80, risk_tier="1순위")
-    store.upsert_risk_result("B", risk_score=10, risk_tier="정상")
+    store.upsert_risk_result("A", inspection_priority_score=80, priority_tier="1순위")
+    store.upsert_risk_result("B", inspection_priority_score=10, priority_tier="정상")
     store.record_inspection("A", {"actual_anomaly_found": True})
     yield
     store.reset()

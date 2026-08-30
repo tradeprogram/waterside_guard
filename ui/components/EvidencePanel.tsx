@@ -5,16 +5,8 @@ import { fetchEvidence, fetchTimeseries, type Site, type Scene } from "@/lib/api
 import TimeSeriesChart from "./TimeSeriesChart";
 import InspectionForm from "./InspectionForm";
 import NdviThumbnails from "./NdviThumbnails";
-
-const FACTOR_LABEL: Record<string, string> = {
-  anomaly_score_mean: "위성 이상도(계절 대비 변화, NDVI/NDMI)",
-  changed_area_ratio: "변화 면적 비율",
-  sar_anomaly_mean: "레이더(SAR) 변화 — 구름과 무관한 보조 근거",
-  recent_rainfall_mm: "최근 14일 누적 강우량",
-  last_inspection_days_ago: "마지막 점검 후 경과일",
-  adjacent_to_water: "수변 인접 여부",
-  past_anomaly_count: "과거 이상 발생 횟수",
-};
+import ScoreBreakdown from "./ScoreBreakdown";
+import EvidenceConfidence from "./EvidenceConfidence";
 
 export default function EvidencePanel({ site, onInspectionSubmitted }: { site: Site; onInspectionSubmitted: () => void }) {
   const [timeseries, setTimeseries] = useState<{ baseline_scenes: Scene[]; current_scenes: Scene[] } | null>(null);
@@ -36,32 +28,37 @@ export default function EvidencePanel({ site, onInspectionSubmitted }: { site: S
         <p className="text-lg font-semibold">{site.addr ?? site.site_id}</p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-3xl font-bold tabular-nums">{site.risk_score ?? "–"}</span>
-        <span className="rounded bg-neutral-200 px-2 py-1 text-sm font-medium">{site.risk_tier}</span>
+      {/* "위험도"가 아니라 "점검 우선순위"임을 점수 옆에 항상 명시한다 — 이 값은 환경피해
+          발생확률로 calibration된 게 아니라 운영상 ranking이다(§ Module RISK 명칭 정리). */}
+      <div>
+        <div className="flex items-baseline gap-3">
+          <span className="text-3xl font-bold tabular-nums">{site.inspection_priority_score ?? "–"}</span>
+          <span className="rounded bg-neutral-200 px-2 py-1 text-sm font-medium">{site.priority_tier}</span>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          점검 우선순위 점수 (0~100) — 훼손 확률이 아니라 &ldquo;먼저 가볼 순서&rdquo;를 나타내는 운영 지표입니다.
+        </p>
       </div>
 
       <div>
-        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">왜 이 순위인가</h3>
-        <ul className="flex flex-col gap-1 text-sm">
-          {(evidence?.contributing_factors ?? []).map((f) => (
-            <li key={f.factor} className="flex justify-between border-b border-neutral-100 py-1">
-              <span>{FACTOR_LABEL[f.factor] ?? f.factor}</span>
-              <span className="font-mono text-neutral-600">
-                {typeof f.value === "boolean" ? (f.value ? "예" : "아니오") : String(f.value)}
-              </span>
-            </li>
-          ))}
-          {evidence && evidence.contributing_factors.length === 0 && (
-            <li className="text-neutral-400">근거 요인 없음(위성 관측 미확보)</li>
-          )}
-        </ul>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">왜 이 순위인가</h3>
+        <ScoreBreakdown
+          factors={evidence?.contributing_factors ?? []}
+          weightCoverage={evidence?.weight_coverage}
+        />
         {site.change_type_hint && site.change_type_hint !== "no_significant_change" && (
           <p className="mt-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
             변화 힌트: {site.change_type_hint} — 종 판독이 아니라 &ldquo;계절패턴과 다른 변화가 있다&rdquo;는 선별 신호일 뿐입니다.
           </p>
         )}
+        {evidence?.changed_area_ratio_source === "approximated" && (
+          <p className="mt-1 text-xs text-neutral-500">
+            변화 면적은 픽셀 실측이 아니라 이상도 크기로부터의 근사치입니다(관측 부족).
+          </p>
+        )}
       </div>
+
+      <EvidenceConfidence confidence={evidence?.evidence_confidence ?? null} />
 
       <NdviThumbnails siteId={site.site_id} />
 

@@ -68,7 +68,7 @@ export default function PriorityQueueList({
                   >
                     {e.status}
                   </span>
-                  <span className="font-semibold tabular-nums">{e.risk_score ?? "–"}</span>
+                  <span className="font-semibold tabular-nums">{e.inspection_priority_score ?? "–"}</span>
                 </span>
               </button>
             ))}

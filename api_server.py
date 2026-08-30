@@ -88,8 +88,8 @@ def _load_one_snapshot(gdf) -> None:
         geometry_4326 = geometry_5179_to_4326(row.geometry.__geo_interface__)
         store.upsert_risk_result(
             row.site_id,
-            risk_score=row.risk_score,
-            risk_tier=row.risk_tier,
+            inspection_priority_score=row.inspection_priority_score,
+            priority_tier=row.priority_tier,
             contributing_factors=_json_field(row.contributing_factors_json),
             extra={
                 "pnu": row.pnu,
@@ -97,6 +97,10 @@ def _load_one_snapshot(gdf) -> None:
                 "addr": row.addr,
                 "anomaly_score": row.anomaly_score,
                 "change_type_hint": row.change_type_hint,
+                "weight_coverage": row.weight_coverage,
+                "changed_area_ratio_source": row.changed_area_ratio_source,
+                "adjacent_to_water": row.adjacent_to_water,
+                "evidence_confidence": _json_field(row.evidence_confidence_json) or None,
                 "geometry_geojson": geometry_4326,
                 "baseline_scenes": _json_field(row.baseline_scenes_json),
                 "current_scenes": _json_field(row.current_scenes_json),
@@ -167,11 +171,15 @@ def get_evidence(site_id: str) -> dict:
         raise HTTPException(404, f"site '{site_id}' not found")
     return {
         "site_id": site_id,
-        "risk_score": entry.get("risk_score"),
-        "risk_tier": entry.get("risk_tier"),
+        "inspection_priority_score": entry.get("inspection_priority_score"),
+        "priority_tier": entry.get("priority_tier"),
         "contributing_factors": entry.get("contributing_factors", []),
         "anomaly_score": entry.get("anomaly_score"),
         "change_type_hint": entry.get("change_type_hint"),
+        # 점수의 신뢰도 맥락 — 이 값들이 없으면 "82점"이 몇 %의 근거로 나온 건지 알 수 없다(§9).
+        "weight_coverage": entry.get("weight_coverage"),
+        "changed_area_ratio_source": entry.get("changed_area_ratio_source"),
+        "evidence_confidence": entry.get("evidence_confidence"),
     }
 
 
@@ -181,8 +189,8 @@ def get_priority_queue(week_of: str = "current") -> dict:
     risk_results = [
         {
             "site_id": e["site_id"],
-            "risk_score": e.get("risk_score"),
-            "risk_tier": e.get("risk_tier"),
+            "inspection_priority_score": e.get("inspection_priority_score"),
+            "priority_tier": e.get("priority_tier"),
             "contributing_factors": e.get("contributing_factors", []),
         }
         for e in entries
@@ -206,7 +214,7 @@ def get_backtest(period: str = "current", k: int = 10) -> dict:
     작동한다 — inspected_at이 있는 field_result에 한해 확인된다.
     """
     entries = store.all()
-    predictions = [{"site_id": e["site_id"], "risk_score": e.get("risk_score")} for e in entries]
+    predictions = [{"site_id": e["site_id"], "inspection_priority_score": e.get("inspection_priority_score")} for e in entries]
     field_results = []
     for e in entries:
         if not e.get("inspections"):

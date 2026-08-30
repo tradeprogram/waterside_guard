@@ -11,7 +11,7 @@ def test_no_labeled_sites_returns_degraded():
     result = run(
         {
             "period": ["2026-09-01", "2026-09-30"],
-            "predictions": [{"site_id": "A", "risk_score": 90}],
+            "predictions": [{"site_id": "A", "inspection_priority_score": 90}],
             "field_results": [],
         }
     )
@@ -22,11 +22,11 @@ def test_no_labeled_sites_returns_degraded():
 def test_perfect_ranking_gives_precision_1():
     # 5개 라벨: 상위 2개(A,B)가 실제 양성, 나머지 3개는 음성. proposed가 정확히 그 순서로 랭킹.
     predictions = [
-        {"site_id": "A", "risk_score": 90},
-        {"site_id": "B", "risk_score": 80},
-        {"site_id": "C", "risk_score": 70},
-        {"site_id": "D", "risk_score": 60},
-        {"site_id": "E", "risk_score": 50},
+        {"site_id": "A", "inspection_priority_score": 90},
+        {"site_id": "B", "inspection_priority_score": 80},
+        {"site_id": "C", "inspection_priority_score": 70},
+        {"site_id": "D", "inspection_priority_score": 60},
+        {"site_id": "E", "inspection_priority_score": 50},
     ]
     field_results = [
         {"site_id": "A", "actual_anomaly_found": True},
@@ -50,10 +50,10 @@ def test_perfect_ranking_gives_precision_1():
 
 def test_inverted_ranking_gives_precision_0():
     predictions = [
-        {"site_id": "A", "risk_score": 10},
-        {"site_id": "B", "risk_score": 20},
-        {"site_id": "C", "risk_score": 90},
-        {"site_id": "D", "risk_score": 80},
+        {"site_id": "A", "inspection_priority_score": 10},
+        {"site_id": "B", "inspection_priority_score": 20},
+        {"site_id": "C", "inspection_priority_score": 90},
+        {"site_id": "D", "inspection_priority_score": 80},
     ]
     field_results = [
         {"site_id": "A", "actual_anomaly_found": True},
@@ -70,8 +70,8 @@ def test_inverted_ranking_gives_precision_0():
 
 def test_baseline_predictions_are_scored():
     predictions = [
-        {"site_id": "A", "risk_score": 90},
-        {"site_id": "B", "risk_score": 10},
+        {"site_id": "A", "inspection_priority_score": 90},
+        {"site_id": "B", "inspection_priority_score": 10},
     ]
     field_results = [
         {"site_id": "A", "actual_anomaly_found": True},
@@ -95,7 +95,7 @@ def test_baseline_predictions_are_scored():
 
 
 def test_data_leakage_flagged_as_warning():
-    predictions = [{"site_id": "A", "risk_score": 90, "predicted_at": "2026-09-05"}]
+    predictions = [{"site_id": "A", "inspection_priority_score": 90, "predicted_at": "2026-09-05"}]
     field_results = [
         {"site_id": "A", "actual_anomaly_found": True, "inspected_at": "2026-09-01"}  # 예측보다 이전 관측
     ]
@@ -105,7 +105,7 @@ def test_data_leakage_flagged_as_warning():
 
 
 def test_no_leakage_when_inspection_after_prediction():
-    predictions = [{"site_id": "A", "risk_score": 90, "predicted_at": "2026-09-01"}]
+    predictions = [{"site_id": "A", "inspection_priority_score": 90, "predicted_at": "2026-09-01"}]
     field_results = [{"site_id": "A", "actual_anomaly_found": True, "inspected_at": "2026-09-05"}]
     result = run({"period": ["2026-09-01", "2026-09-30"], "predictions": predictions, "field_results": field_results})
     assert result["status"] == "ok"

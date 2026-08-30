@@ -12,8 +12,8 @@ export type ContributingFactor = {
 export type Site = {
   site_id: string;
   stage: string;
-  risk_score: number | null;
-  risk_tier: string | null;
+  inspection_priority_score: number | null;
+  priority_tier: string | null;
   contributing_factors: ContributingFactor[];
   pnu?: string;
   jibun?: string;
@@ -27,8 +27,15 @@ export type Site = {
 export type PriorityQueueEntry = {
   rank: number;
   site_id: string;
-  risk_score: number | null;
+  inspection_priority_score: number | null;
   status: "미점검" | "점검완료";
+};
+
+// module_chg/confidence.py의 반환 구조 — level은 등급, factors는 그 등급이 나온 ± 사유 목록.
+export type EvidenceConfidence = {
+  level: "높음" | "보통" | "낮음";
+  score: number;
+  factors: { label: string; effect: number; detail: string }[];
 };
 
 export type Envelope<T> = {
@@ -64,11 +71,16 @@ export function fetchPriorityQueue() {
 export function fetchEvidence(siteId: string) {
   return getJson<{
     site_id: string;
-    risk_score: number | null;
-    risk_tier: string | null;
+    inspection_priority_score: number | null;
+    priority_tier: string | null;
     contributing_factors: ContributingFactor[];
     anomaly_score: number | null;
     change_type_hint: string;
+    // 점수의 신뢰도 맥락 — weight_coverage는 "전체 가중치 중 몇 %의 근거로 계산됐는지",
+    // changed_area_ratio_source는 변화면적이 픽셀 실측인지 근사치인지(§9 불확실성 표기).
+    weight_coverage: number | null;
+    changed_area_ratio_source: "pixel_diff" | "approximated" | null;
+    evidence_confidence: EvidenceConfidence | null;
   }>(`/sites/${encodeURIComponent(siteId)}/evidence`);
 }
 

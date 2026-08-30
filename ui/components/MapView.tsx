@@ -44,7 +44,7 @@ function waitForSource(map: MapLibreMap, sourceId: string, callback: () => void)
   return () => clearInterval(intervalId);
 }
 
-// risk_tier(§ARCHITECTURE.md Module RISK) 색상 — 등급 4단계
+// priority_tier(§ARCHITECTURE.md Module RISK) 색상 — 등급 4단계
 const TIER_COLOR: Record<string, string> = {
   "1순위": "#c0392b",
   "2순위": "#e67e22",
@@ -224,8 +224,8 @@ export default function MapView({
           geometry: s.geometry_geojson!,
           properties: {
             site_id: s.site_id,
-            risk_score: s.risk_score,
-            color: TIER_COLOR[s.risk_tier ?? "정상"] ?? "#999999",
+            inspection_priority_score: s.inspection_priority_score,
+            color: TIER_COLOR[s.priority_tier ?? "정상"] ?? "#999999",
             selected: s.site_id === selectedSiteId,
           },
         }));

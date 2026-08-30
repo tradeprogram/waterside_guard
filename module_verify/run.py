@@ -90,7 +90,7 @@ def run(input: dict) -> dict:
             )
 
     k = input.get("k", 10)
-    proposed_ranking = [(p["site_id"], p.get("risk_score") or 0) for p in predictions if p.get("site_id")]
+    proposed_ranking = [(p["site_id"], p.get("inspection_priority_score") or 0) for p in predictions if p.get("site_id")]
 
     positive_count = sum(1 for v in labels.values() if v)
     baseline_comparison = [

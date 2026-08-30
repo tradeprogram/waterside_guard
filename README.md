@@ -43,7 +43,7 @@ flowchart TB
         direction TB
         C1["Module CHG<br/>시계열 이상탐지<br/><small>NDVI/NDMI anomaly · SAR change</small>"]
         A1["Module AGG<br/>GIS 공간 집계<br/><small>pixel → 관리대상지(site_id) 단위</small>"]
-        R1["Module RISK<br/>위험도 산정<br/><small>규칙기반 → LightGBM ranking</small><br/>risk_score 0~100"]
+        R1["Module RISK<br/>위험도 산정<br/><small>규칙기반 → LightGBM ranking</small><br/>inspection_priority_score 0~100"]
         C1 --> A1 --> R1
     end
 
@@ -103,15 +103,15 @@ stateDiagram-v2
     [*] --> 관측: Module OBS
     관측 --> 변화탐지: Module CHG
     변화탐지 --> 공간집계: Module AGG
-    공간집계 --> 위험도산정: Module RISK
-    위험도산정 --> 우선순위큐등록: Module O
+    공간집계 --> 우선순위산정: Module RISK
+    우선순위산정 --> 우선순위큐등록: Module O
     우선순위큐등록 --> 현장점검등록: 담당자가 Top-N 확인
     현장점검등록 --> 결과입력: Module FIELD
     결과입력 --> 검증완료: Module VERIFY
-    검증완료 --> 위험도산정: 다음 주기 (가중치 보정)
+    검증완료 --> 우선순위산정: 다음 주기 (가중치 보정)
 
-    note right of 위험도산정
-        risk_score 0~100
+    note right of 우선순위산정
+        inspection_priority_score 0~100
         + contributing_factors
         (근거 없는 숫자는 없음)
     end note
@@ -136,7 +136,7 @@ sequenceDiagram
 
     담당자->>UI: 월요일 오전 접속
     UI->>O: 이번 주 Priority Queue 조회
-    O-->>UI: Top-N 대상지 (risk_score 순)
+    O-->>UI: Top-N 대상지 (inspection_priority_score 순)
     담당자->>UI: 1순위 대상지 클릭
     UI->>AG: "왜 1순위야?"
     AG-->>UI: anomaly_score·변화면적·최근점검일 근거 설명
@@ -156,13 +156,35 @@ sequenceDiagram
 | **OBS** | Sentinel-2/1, V-World 연속지적도 수집·전처리 | 위성 composite, PNU 폴리곤 |
 | **CHG** | 시계열 대비 이상변화 탐지 (종 판독 아님, "달라졌다"까지만) | `anomaly_score`, `changed_area_ratio` |
 | **AGG** | pixel → 관리대상지(`site_id`) 단위로 GIS 집계 | 대상지별 feature 벡터 |
-| **RISK** | 규칙기반(1단계) → LightGBM ranking(2단계, label 확보 후) | `risk_score`(0~100) + `contributing_factors`(근거) |
+| **RISK** | 규칙기반(1단계) → LightGBM ranking(2단계, label 확보 후) | `inspection_priority_score`(0~100) + `contributing_factors`(근거) |
 | **O** | Top-N 우선순위 큐 생성·상태 관리 | `priority_queue` |
 | **FIELD** | 현장점검 사진·결과 입력 | `inspection_id` |
 | **VERIFY** | 예측 vs 실측 backtest, baseline 비교 | `Precision@K`, `Recall@Top20%` |
 | **AGENT** | 위 모듈들의 tool output을 읽어 자연어로 설명·보고서 생성 (숫자를 만들지 않음) | 점검표, 주간보고서 |
 
 전체 모듈 입출력 계약(예시 JSON)은 [`contracts/`](contracts/) 및 [ARCHITECTURE.md §5](ARCHITECTURE.md#5-모듈-계약--입출력-예시)에 있다. 모든 모듈은 공통 봉투(envelope) 규약 `{status, fallback_tier, data, warnings}`을 따른다 — [ARCHITECTURE.md §4](ARCHITECTURE.md#4-통합-규약-모든-모듈-필수-준수).
+
+### 구현 상태 — Implemented / Experimental / Planned
+
+> **"코드가 동작한다"와 "실제 성능이 검증됐다"는 다르다.** 예를 들어 Module VERIFY의 `Precision@K` 함수가 테스트를 통과한다는 건 *계산 코드가 맞다*는 뜻이지 *수변가드의 실제 탐지 정확도가 높다*는 뜻이 아니다. 아래 표는 그 구분을 명시한다.
+
+| 기능 | 상태 | 근거 / 남은 것 |
+|---|---|---|
+| PNU → 필지 폴리곤 복원 (V-World) | ✅ Implemented | 한강유역 6,275건 중 5,526건 복원 |
+| Sentinel-2 NDVI/NDMI 시계열 (GEE) | ✅ Implemented | 실제 관측치로 60개 site 처리 |
+| Sentinel-1 SAR 변화 | ✅ Implemented | IW/VV 기간 합성, 광학 실패 시 단독 폴백까지 동작 |
+| 픽셀 단위 변화면적 | ✅ Implemented | 60/60건 실측 성공, 실패 시 근사치 폴백을 `changed_area_ratio_source`로 구분 표시 |
+| 수체 인접 여부 (JRC GSW) | ✅ Implemented | 60건 중 20건 인접 판정 |
+| 최근 강우 (Open-Meteo) | ✅ Implemented | 신뢰도 confounder로도 사용 |
+| 우선순위 점수 (rule_v1) | ✅ Implemented | 7요인 가중합 + 결측 재정규화. **가중치·임계값은 초기 가정치** |
+| 증거 신뢰도 (`evidence_confidence`) | 🧪 Experimental | 판정 로직은 동작하나 **가중치가 label로 보정되지 않음** |
+| Top-N 우선순위 큐 · 현장점검 입력 | ✅ Implemented | end-to-end 브라우저 검증 완료 |
+| Precision@K / Recall@K 계산 엔진 | ✅ Implemented | 계산·leakage 가드 동작. **아래 항목과 구분할 것** |
+| **실제 정확도 검증 (Ground Truth)** | ⏳ **Planned** | **현재 최대 약점** — 독립 판독 라벨 50~100건 확보 후 실측 예정 |
+| 계절 정합 baseline (season-matched) | ⏳ Planned | 현재는 두 기간 단순 차분 — 계절성 오탐 방어 미완 |
+| Evidence Agent (Gemini) | ✅ Implemented | 판정은 하지 않고 tool 결과 설명만 — 의도적으로 비중 축소 |
+| LightGBM ranking / SHAP | ❌ 미구현 (의도적) | label이 충분히 쌓이기 전에는 만들지 않는다 |
+| 전국 production 운영 | ❌ 미구현 (범위 밖) | 배치 아키텍처만 검증, 실제 배포는 파일럿 이후 |
 
 ---
 
@@ -177,7 +199,7 @@ sequenceDiagram
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
-**현재 가장 큰 한계**: `risk_score`를 계산하는 `site_attributes`(복원경과일·최근점검일·인접수계여부·과거이상이력)는 KECI 내부 자산 DB에서 와야 하는데, 이 프로토타입은 그 DB에 접근할 방법이 없다. 지금은 위성 관측 요인(`anomaly_score_mean`+`changed_area_ratio`, 가중치 합 0.55)만으로 점수를 매기고 있어 최대 점수가 구조적으로 낮게 나온다 — 자세한 내용은 [ARCHITECTURE.md §13 "알려진 한계"](ARCHITECTURE.md#13-세션-브리핑--다음에-이-리포를-여는-claude-code-세션에게).
+**현재 가장 큰 한계**: 실제 현장 라벨(Ground Truth)이 없어 Precision@K 같은 정확도를 아직 실측하지 못했다 — 검증 엔진(Module VERIFY)은 구현돼 있지만 채점할 정답지가 없는 상태다. 그다음 한계는 `site_attributes` 중 복원경과일·최근점검일·과거이상이력이 KECI 내부 자산 DB에서 와야 하는데 접근할 방법이 없다는 점이다(인접수계여부·최근강우는 공개 데이터로 해결됨). 결측 요인은 가중치를 빼고 재정규화하므로 점수가 구조적으로 눌리지는 않지만, `weight_coverage`로 "전체 근거의 75%만 확보된 점수"임을 항상 함께 표시한다 — 자세한 내용은 [ARCHITECTURE.md §13 "알려진 한계"](ARCHITECTURE.md#13-세션-브리핑--다음에-이-리포를-여는-claude-code-세션에게).
 
 ---
 
@@ -192,7 +214,7 @@ common/                       # envelope·좌표변환 등 전 모듈 공유 유
 module_obs/                   # Module OBS — Google Earth Engine (Sentinel-2), batch.py=배치 조회, thumbnail.py=NDVI 이미지
 module_chg/                   # Module CHG — 변화탐지 (OBS 두 번 호출·이상도 계산)
 module_agg/                   # Module AGG — CHG 결과 + 대상지 속성 집계
-module_risk/                  # Module RISK — 규칙기반 risk_score 산정
+module_risk/                  # Module RISK — 규칙기반 inspection_priority_score 산정
 module_o/                     # Module O — 우선순위 큐 + 상태머신(store.py)
 module_field/                 # Module FIELD — 현장점검 입력 검증
 module_verify/                 # Module VERIFY — Precision@K·Recall@K·baseline 비교

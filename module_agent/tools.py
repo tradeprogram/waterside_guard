@@ -9,14 +9,14 @@ from module_o.store import store
 
 
 def get_risk_evidence(site_id: str) -> dict:
-    """이 대상지의 현재 위험점수·등급·근거 요인(contributing_factors)을 반환한다."""
+    """이 대상지의 현재 점검 우선순위 점수·등급·근거 요인(contributing_factors)을 반환한다."""
     entry = store.get(site_id)
     if entry is None:
         return {"error": f"site '{site_id}' not found"}
     return {
         "site_id": site_id,
-        "risk_score": entry.get("risk_score"),
-        "risk_tier": entry.get("risk_tier"),
+        "inspection_priority_score": entry.get("inspection_priority_score"),
+        "priority_tier": entry.get("priority_tier"),
         "contributing_factors": entry.get("contributing_factors", []),
         "anomaly_score": entry.get("anomaly_score"),
         "change_type_hint": entry.get("change_type_hint"),
@@ -47,7 +47,7 @@ def get_weekly_summary() -> dict:
     """전체 대상지 현황 요약 — 총 대상지 수, 고위험(1·2순위) 수, 현장점검 완료 수,
     실제 이상이 확인된 점검 건수를 반환한다."""
     entries = store.all()
-    high_risk = [e for e in entries if e.get("risk_tier") in ("1순위", "2순위")]
+    high_risk = [e for e in entries if e.get("priority_tier") in ("1순위", "2순위")]
     inspected = [e for e in entries if e.get("inspections")]
     confirmed = [
         e for e in inspected if any(i.get("actual_anomaly_found") for i in e["inspections"])

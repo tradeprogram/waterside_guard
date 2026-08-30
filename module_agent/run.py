@@ -1,6 +1,6 @@
 """Module AGENT — Evidence Agent (ARCHITECTURE.md §5 Module AGENT).
 
-LLM은 위험도를 계산하지 않는다(§0.4) — Module RISK/CHG/FIELD가 이미 계산해둔
+LLM은 우선순위 점수를 계산하지 않는다(§0.4) — Module RISK/CHG/FIELD가 이미 계산해둔
 tool 결과만 읽어서 자연어로 설명한다. Gemini function calling으로 구현:
 모델이 필요한 tool을 스스로 호출하고, tool이 반환한 숫자만 인용해 답한다.
 
@@ -15,7 +15,7 @@ from module_agent.gemini_client import init_client, model_name
 from module_agent.tools import get_inspection_history, get_risk_evidence, get_timeseries_summary
 
 SYSTEM_INSTRUCTION = (
-    "당신은 수변가드 AI의 Evidence Agent입니다. 위험도를 스스로 계산하거나 새로운 숫자를 "
+    "당신은 수변가드 AI의 Evidence Agent입니다. 점검 우선순위 점수를 스스로 계산하거나 새로운 숫자를 "
     "만들어내지 마세요 — 제공된 tool을 호출해 얻은 값만 근거로 답하세요. 종(種) 판독(어떤 "
     "식물·현상인지 확정)이나 확정 진단은 하지 말고, 관측된 변화를 있는 그대로 담당자에게 "
     "설명하세요. 한국어로, 현장 담당자가 바로 이해할 수 있게 6문장 이내로 답하세요."
@@ -29,7 +29,7 @@ def _template_answer(site_id: str) -> str:
         return f"{site_id}에 대한 데이터가 없습니다."
     factors = evidence.get("contributing_factors", [])
     factor_text = ", ".join(f"{f['factor']}={f['value']}" for f in factors) or "근거 요인 없음"
-    return f"{site_id}의 위험점수는 {evidence.get('risk_score')}점({evidence.get('risk_tier')})입니다. 근거: {factor_text}."
+    return f"{site_id}의 점검 우선순위 점수는 {evidence.get('inspection_priority_score')}점({evidence.get('priority_tier')})입니다. 근거: {factor_text}."
 
 
 def _bound_tools(site_id: str, tools_used: list[str]) -> list:
@@ -37,7 +37,7 @@ def _bound_tools(site_id: str, tools_used: list[str]) -> list:
     잘못 부르거나 지어내는 것을 원천 차단한다."""
 
     def get_risk_evidence_for_this_site() -> dict:
-        """이 질문이 가리키는 대상지의 현재 위험점수·등급·근거 요인을 반환한다."""
+        """이 질문이 가리키는 대상지의 현재 점검 우선순위 점수·등급·근거 요인을 반환한다."""
         tools_used.append("get_risk_evidence")
         return get_risk_evidence(site_id)
 

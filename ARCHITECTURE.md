@@ -135,7 +135,7 @@ Earth Observation → 시계열 변화 → 공간 객체화 → 위험도 모델
 
 ### 2.1 7단계 상태머신
 
-`관측(OBS) → 변화탐지(CHG) → 공간집계(AGG) → 위험도산정(RISK) → 우선순위생성(O) → 현장점검(FIELD) → 검증환류(VERIFY)`
+`관측(OBS) → 변화탐지(CHG) → 공간집계(AGG) → 우선순위산정(RISK) → 우선순위생성(O) → 현장점검(FIELD) → 검증환류(VERIFY)`
 
 Module AGENT는 별도 상태가 아니라 O/FIELD/VERIFY 위에 얹히는 설명·보고 layer다.
 
@@ -216,7 +216,7 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 |---|---|
 | 좌표계 | 내부 분석·저장은 **EPSG:5179**(한국 UTM-K/중부원점 통합좌표계 — 국내 DEM·V-World 데이터가 원래 이 계열이라 거리·면적 계산이 왜곡되지 않음). 지점은 `x_5179`/`y_5179`, 폴리곤은 `geometry_5179`. **웹 지도(MapLibre) 출력 직전에만** EPSG:4326으로 재투영해 `*_geojson` 필드명으로 내보낸다 |
 | 시간 | ISO 8601 + 타임존 명시. 예: `"2026-09-05T09:00:00+09:00"`(KST). UTC 금지 |
-| 확률/점수 | `risk_score`는 0~100 정수, 그 외 확률형 값은 float 0.0~1.0 |
+| 확률/점수 | `inspection_priority_score`는 0~100 정수, 그 외 확률형 값은 float 0.0~1.0 |
 | 거리/면적 | 미터(`_m`), 헥타르(`_ha`) 또는 제곱미터(`_m2`) — 필드명에 단위 명시 필수 |
 | 결측치 | `null` 사용, 빈 문자열/0으로 대체 금지 |
 | 식별자 | 관리대상지는 `site_id`(내부 발급, PNU 기반), `pnu`(원본 19자리 코드) 둘 다 보존 |
@@ -291,7 +291,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 // 2026-08-31 추가(아래 "SAR 융합 추가"·"요인 실측화" 참조)
 { "anomaly_score": 0.72, "changed_area_ratio": 0.18, "changed_area_ratio_source": "pixel_diff", // "pixel_diff" | "approximated"
   "change_type_hint": "vegetation_decline", // "vegetation_decline" | "moisture_increase" | "bare_ground_increase" | "no_significant_change" | "possible_change_sar_only"
-  "source": "observed", "confidence_interval": [0.61, 0.83],
+  "source": "observed", "signal_variability": [0.61, 0.83], // 통계적 신뢰구간이 아니라 장면 간 흔들림 폭
+  "evidence_confidence": { "level": "높음", "score": 6, "factors": [] }, // 증거 신뢰도(훼손 확률 아님)
   "sar_vv_delta": 2.5, "sar_anomaly": 0.833 }
 ```
 
@@ -300,6 +301,8 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
 **구현 상태(2026-08-29)**: `module_chg/run.py` — Module OBS를 baseline/current 두 번 호출해 NDVI/NDMI **scene 평균의 편차**로 `anomaly_score`를 계산한다. **중요한 근사**: 현재 `changed_area_ratio`는 진짜 픽셀 단위 변화면적이 아니라 이상도 크기로부터 근사한 값이다(§12 로드맵 B급 확장에서 Earth Engine `reduceRegion` histogram 기반 pixel-wise diff로 교체 예정) — Backtest A(§10)에서 이 근사가 실제와 얼마나 다른지 반드시 검증할 것. `python -m pytest module_chg/tests/ -v`로 mock 기반 단위 테스트(자격증명 불필요) 통과 확인됨.
 
 **리팩터링(2026-08-29)**: 이상도 계산 로직을 `compute_change_from_scenes(baseline_scenes, current_scenes)` 순수 함수로 분리했다 — `run()`은 이 함수를 부르기 전에 Module OBS를 호출할 뿐이다. 배치 파이프라인(`scripts/run_priority_queue_batch.py`)이 `module_obs.batch.run_batch()`로 얻은 scene 리스트에 이 함수를 그대로 재사용해서, 분류 임계치·정규화 상수(`ANOMALY_THRESHOLD_FOR_CHANGE` 등)가 단일/배치 두 경로에서 따로 놀지 않는다.
+
+**신뢰도 표기 정리(2026-08-31, 중간점검 리서치 P0 반영)**: `confidence_interval` → **`signal_variability`**로 이름을 바꾸고, 별도로 **`evidence_confidence`**(`module_chg/confidence.py`)를 신설했다. 기존 `confidence_interval`은 현재기간 scene 평균들의 표준편차를 anomaly score 주변에 배치한 값이라 통계적으로 calibration된 신뢰구간이 아니었다 — 이름을 그대로 두면 "95% CI인가? sampling distribution이 뭔가?"라는 질문에 답할 수 없다(리서치 §Red-Team). 새 `evidence_confidence`는 **"훼손될 확률"이 아니라 "지금 확보된 위성 증거를 얼마나 믿을 수 있는가"**만 나타내며, 단일 숫자가 아니라 `level`(높음/보통/낮음) + `factors`(± 사유 목록)를 함께 반환한다 — 화면에서 "구름은 어떻게 걸렀나", "SAR와 광학이 안 맞으면?" 같은 질문을 바로 확인할 수 있게 하기 위해서다. 판정 요소는 유효 장면 수·기준기간 장면 수·구름 비율·NDVI/NDMI 방향 일치·광학·SAR 센서 일치(가장 큰 가점 +2)·변화면적 실측 여부·강우 교란 가능성이다. **강우의 역할도 함께 바뀌었다**: 리서치가 지적한 대로 강우는 hazard이기도 하지만 NDMI·SAR 변화를 설명하는 confounder이기도 하므로, 습윤 신호(NDMI 증가 또는 SAR 감소)와 함께 나타나면 신뢰도를 깎는다. 실측 예: 여주시 양촌리 369-5는 다른 요소가 모두 가점인데 "최근 14일 127mm 강우 + 습윤 신호"로 -1이 붙어 근거가 화면에 그대로 노출된다.
 
 **SAR 융합 추가(2026-08-30, 리서치 정합성 점검 반영)**: 원 리서치(수상전략 심층 리서치 PDF)를 다시 확인해보니 "Top 1 — 수변가드 AI"의 "핵심 기술"은 명시적으로 **"S1/S2 변화탐지"**였고, 5대 기술적 해자 1번이 "Multisensor Spatial-Temporal Fusion"이었다 — 그런데 최초 구현은 Sentinel-2(NDVI/NDMI)만 넣고 Sentinel-1 SAR를 빠뜨렸다(사용자가 "NDVI만으로 완성도가 있는가"를 되짚어보자고 지적해서 발견, 2026-08-30). 리서치는 이 신호가 왜 필요한지도 명시한다: "원격탐사 참가자의 흔한 결과는 NDVI 지도다" — 즉 NDVI/NDMI만으로는 딱 흔한 baseline에 머무른다는 뜻. `compute_change_from_scenes()`에 `baseline_sar_vv_mean`/`current_sar_vv_mean`(Module OBS의 `sar_vv_mean`, Sentinel-1 IW/VV backscatter dB) 파라미터를 추가했다. **역할을 두 가지로 제한**: (1) 광학 scene이 둘 다 있으면 SAR는 판정을 바꾸지 않고 `sar_vv_delta`/`sar_anomaly`(0~1 정규화, `SAR_VV_DELTA_NORMALIZATION_DB=3.0`)로 보조 근거만 얹는다 — `change_type_hint`는 여전히 NDVI/NDMI 기준. (2) 광학 scene이 구름 등으로 아예 없는데 SAR 평균은 둘 다 있으면(all-weather 특성), SAR 단독으로 `anomaly_score`를 근사하고 `change_type_hint="possible_change_sar_only"`, `source="observed_sar_fallback"`으로 표시해 낮은 신뢰도임을 숨기지 않는다. **의도적으로 안 한 것**: SAR backscatter 변화로 "식생/토양/구조물 중 무엇이 바뀌었는지" 판독하지 않는다 — 그건 리서치의 "매우 중요한 범위 제한"이 명시적으로 경고한 과잉해석이다. `module_obs/run.py`(단일 site, `reduceRegion`)와 `module_obs/batch.py`(다중 site, `reduceRegions`)에 각각 SAR 조회를 추가했는데, **실측으로 발견한 함정**: 단일 밴드("VV") 이미지를 `reduceRegions`로 여러 site에 한 번에 돌리면 출력 컬럼명이 밴드명이 아니라 reducer 기본 출력명인 `"mean"`이 된다(다중 밴드였던 NDVI/NDMI 배치 조회와 다름) — 처음엔 `"VV"`로 읽어서 50개 site 전부 `sar_vv_delta:null`이 나왔고, 실제 site 하나로 직접 `getInfo()` 결과를 찍어봐서 원인을 찾았다. `pytest module_chg/tests/ -v`에 SAR 단독/병행 케이스 테스트 추가, `data/processed/hanriver_priority_queue.geojson`·`yongin_yubang_priority_queue.geojson` 60개 site 전부 재생성해 실제 SAR 값(`sar_vv_delta` 대략 -5.4~+3.7dB)이 반영됨을 확인.
 
@@ -334,10 +337,11 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
     "adjacent_to_water": true, "restoration_elapsed_days": 420,
     "last_inspection_days_ago": 63, "past_anomaly_count": 1, "recent_rainfall_mm": 20.0 } }
 
-// output (data) — risk_score가 최종 output. 아래 값은 module_risk/run.py 실제 실행 결과(2026-08-30 재검증,
-// SAR·최근강우 요인 추가로 가중치를 재조정하기 전에는 이 예시가 54점이었다)
-{ "site_id": "A1037", "risk_score": 51, "risk_tier": "2순위",
-  // risk_tier ∈ {"1순위"(>=70),"2순위"(>=50),"3순위"(>=30),"정상"}. "rank"(대기열 순번, §Module O)와는 별개 개념
+// output (data) — inspection_priority_score가 최종 output. 아래는 module_risk/run.py 실제 실행 결과
+// (2026-08-31 재검증, contracts/module_risk.example.json과 동일). 이 값은 "훼손 확률"이 아니라
+// 운영상 ranking이다 — 아래 "명칭 정리" 참조.
+{ "site_id": "A1037", "inspection_priority_score": 50, "priority_tier": "2순위",
+  // priority_tier ∈ {"1순위"(>=70),"2순위"(>=50),"3순위"(>=30),"정상"}. "rank"(대기열 순번, §Module O)와는 별개 개념
   "contributing_factors": [
     { "factor": "anomaly_score_mean", "value": 0.72, "weight": 0.30 },
     { "factor": "changed_area_ratio", "value": 0.18, "weight": 0.15 },
@@ -347,13 +351,14 @@ raw WFS 엔드포인트·CQL_FILTER 문법을 직접 조사하는 대신 이 라
     { "factor": "adjacent_to_water", "value": true, "weight": 0.10 },
     { "factor": "past_anomaly_count", "value": 1, "weight": 0.10 }
   ],
+  "weight_coverage": 1.0, // 전체 가중치 중 실제로 확보된 근거의 비율(결측 재정규화 투명성, 아래 참조)
   "model_version": "rule_v1", "source": "rule_based" } // "rule_based" | "ml_ranking"
 ```
 
-`risk_score` 산출식(1단계, rule baseline, 2026-08-30 재조정):
+`inspection_priority_score` 산출식(1단계, rule baseline, 2026-08-30 재조정):
 
 ```
-risk_score = 100 × clip(
+inspection_priority_score = 100 × clip(
   0.30 × anomaly_score_mean
   + 0.15 × changed_area_ratio
   + 0.10 × sar_anomaly_mean            // 2026-08-30 추가 — 광학 이상도의 보조 근거(§Module CHG)
@@ -361,12 +366,16 @@ risk_score = 100 × clip(
   + 0.15 × min(last_inspection_days_ago / 180, 1.0)
   + 0.10 × adjacent_to_water(0|1)
   + 0.10 × min(past_anomaly_count / 3, 1.0)
-, 0, 1)
+, 0, 1) ÷ weight_coverage   // ← 결측 요인의 가중치를 뺀 나머지로 재정규화(2026-08-31, 아래 참조)
 ```
 
 가중치는 초기 가정값 — Backtest B(§10)에서 실제 이상사례 기준으로 보정한다. `contributing_factors`는 Module AGENT가 "왜 1순위인가"를 설명할 때 그대로 인용하는 근거 데이터다(숫자를 만들지 않고 tool output을 읽는 원칙, §0.4).
 
-**구현 상태(2026-08-29)**: `module_risk/run.py` — 위 산출식을 그대로 구현. `features`의 특정 항목이 `null`이면(§ Module AGG의 KECI 내부 데이터 접근 제약 참조) 해당 가중항을 0으로 처리하고 `contributing_factors`에서 빼며, `status:"degraded"`로 표시해 "이 점수는 일부 요인 없이 계산됐다"는 사실을 숨기지 않는다. `risk_tier` 경계값은 70/50/30(§ 위 주석)으로 확정.
+**구현 상태(2026-08-29, 2026-08-31 갱신)**: `module_risk/run.py` — 위 산출식을 그대로 구현. `features`의 특정 항목이 `null`이면(§ Module AGG의 KECI 내부 데이터 접근 제약 참조) 해당 가중항을 빼고 **남은 가중치로 재정규화**하며, `status:"degraded"` + `weight_coverage`로 "이 점수는 일부 요인 없이 계산됐다"는 사실을 숨기지 않는다. `priority_tier` 경계값은 70/50/30(§ 위 주석)으로 확정.
+
+**명칭 정리·재정규화 수정(2026-08-31, 중간점검 리서치 P0 반영)**:
+- **`risk_score` → `inspection_priority_score`, `risk_tier` → `priority_tier`**: 이 값은 환경피해 발생확률로 calibration된 게 아니라 0~100으로 정규화된 운영상 ranking이다. "위험도 82점"이라 부르면 심사에서 "82점이면 82% 위험인가?"라는 질문에 통계적으로 답해야 하는데 답할 근거가 없다(리서치 §Red-Team). "점검 우선순위 82점"은 ranking임이 자명해 방어된다. 상태머신 단계명도 `위험도산정` → `우선순위산정`으로 함께 바꿨다.
+- **결측 요인 재정규화(실제 버그 수정)**: 예전에는 결측 요인의 가중치를 그냥 빼먹고 더해서, KECI 내부 DB 접근이 안 되는 필지가 실제 상태와 무관하게 구조적으로 낮은 점수를 받았다. **실측으로 확인한 영향**: 결측 3개(복원경과일·최근점검일·과거이상이력)인 우리 60개 site는 4개 요인이 전부 만점이어도 65점이 천장이라 **1순위(≥70)가 구조적으로 불가능**했다 — 실제 분포도 1순위 0건 / 2순위 1건 / 3순위 15건 / 정상 44건(최고 50점)으로, "먼저 가볼 곳"을 알려주는 서비스인데 최상위 등급이 비어 있었다. 재정규화 후 같은 데이터에서 **2순위 8건 / 3순위 29건 / 정상 23건(최고 67점)**으로 분포가 정상화됐다. 여전히 1순위 0건인 것은 이제 구조적 한계가 아니라 "실제로 70점을 넘는 필지가 없다"는 정직한 결과다 — 임계값을 낮춰 1순위를 인위적으로 만들지 않았다.
 
 **가중치 재조정(2026-08-30, 리서치 정합성 점검 반영)**: 원 리서치를 다시 확인해 SAR(`sar_anomaly_mean`)과 최근 강우(`recent_rainfall_mm`) 요인을 추가하면서(§ Module CHG·AGG "추가" 참조), 기존 5개 요인 합 1.0을 유지하려고 전체 가중치를 재분배했다: `anomaly_score_mean` 0.35→0.30, `changed_area_ratio` 0.20→0.15, `adjacent_to_water`·`past_anomaly_count` 각 0.15→0.10, `last_inspection_days_ago`는 0.15 유지, 새 요인 둘은 각 0.10. 광학 이상도(`anomaly_score_mean`)를 여전히 가장 큰 비중으로 남긴 이유는, 리서치의 방어 논리 자체가 "판정의 중심은 광학, SAR는 보조 근거"라는 데 있기 때문이다(SAR로 변화 종류까지 판독하려 들면 리서치가 경고한 과잉해석이 된다). `pytest module_risk/tests/ -v`의 A1037 회귀 테스트를 새 가중치·새 요인 기준으로 갱신(54점→51점) — 가중치를 다시 바꾸면 이 테스트도 함께 갱신할 것.
 
@@ -377,12 +386,12 @@ risk_score = 100 × clip(
 ```jsonc
 // output (data)
 { "week_of": "2026-09-01", "priority_queue": [
-    { "rank": 1, "site_id": "A1037", "risk_score": 54, "status": "미점검" }
+    { "rank": 1, "site_id": "A1037", "inspection_priority_score": 54, "status": "미점검" }
   ],
   "queue_size": 12, "generated_at": "2026-09-01T09:00:00+09:00" }
 ```
 
-**상태머신**(대상지 단위): `관측 → 변화탐지 → 집계 → 위험도산정 → 우선순위큐등록 → 현장점검등록 → 결과입력 → 검증완료`. 담당자 승인 게이트는 없다(재난 대응형 시스템이 아니므로 human-in-the-loop이 이미 "현장점검을 실제로 갈지 말지" 판단 자체에 있음 — Aquaguard의 관공서 모드 승인 게이트 같은 별도 장치 불필요).
+**상태머신**(대상지 단위): `관측 → 변화탐지 → 집계 → 우선순위산정 → 우선순위큐등록 → 현장점검등록 → 결과입력 → 검증완료`. 담당자 승인 게이트는 없다(재난 대응형 시스템이 아니므로 human-in-the-loop이 이미 "현장점검을 실제로 갈지 말지" 판단 자체에 있음 — Aquaguard의 관공서 모드 승인 게이트 같은 별도 장치 불필요).
 
 **구현 상태(2026-08-29)**: `module_o/run.py` + `module_o/store.py` — Module RISK 결과를 받아 정렬·순번 부여만 한다(위험도 계산은 하지 않음, §0.4). `SiteStateStore`는 프로세스 인메모리 dict(Aquaguard의 `AlertStore` 패턴)로 8단계 상태를 추적하지만, **현장점검이 들어와도 "검증완료"로 자동 전이시키지 않는다** — Module VERIFY가 아직 없어서 검증됐다고 주장하면 거짓이 되기 때문(§ Module FIELD 구현 상태 참조). 대신 "결과입력" 단계에 머문다. `pytest module_o/tests/ -v` 통과.
 
@@ -411,7 +420,7 @@ risk_score = 100 × clip(
 // baseline_predictions는 선택 — Module VERIFY는 "recency"/"ndvi_threshold"가 무엇인지 모른다(구현 상태 참조),
 // 호출부가 이미 계산한 대체 랭킹 점수만 넘겨받아 채점한다. predicted_at/inspected_at도 선택(leakage 검사용).
 { "period": ["2026-09-01", "2026-09-30"], "k": 10,
-  "predictions": [ { "site_id": "A1037", "risk_score": 54, "predicted_at": "2026-09-01" } ],
+  "predictions": [ { "site_id": "A1037", "inspection_priority_score": 54, "predicted_at": "2026-09-01" } ],
   "field_results": [ { "site_id": "A1037", "actual_anomaly_found": true, "inspected_at": "2026-09-05" } ],
   "baseline_predictions": { "ndvi_threshold": [ { "site_id": "A1037", "score": 0.3 } ] } }
 
@@ -457,7 +466,7 @@ Evidence Agent
 
 **두 단계 구조**(Aquaguard와 동일 원칙 — physics/rule baseline 없이 AI surrogate부터 만들지 않는다):
 
-1. **1단계 — 규칙+통계 이상탐지**(§5 Module RISK의 `risk_score` 산출식). 설명 가능하고 label 없이도 작동한다. **공모전 프로토타입의 기본값.**
+1. **1단계 — 규칙+통계 이상탐지**(§5 Module RISK의 `inspection_priority_score` 산출식). 설명 가능하고 label 없이도 작동한다. **공모전 프로토타입의 기본값.**
 2. **2단계 — LightGBM/XGBoost ranking**. Module FIELD로 현장점검 label이 충분히 쌓이면(§12 로드맵 B급) 붙인다. 입력: AGG의 features 전체. 목표: `field_verification_required = 1/0` 또는 `maintenance_priority` ranking.
 
 DNN segmentation은 고해상도 영상과 충분한 label이 있을 때만 후속 고도화로 검토한다(MVP 범위 밖).
@@ -479,7 +488,7 @@ POST /reports/weekly
 POST /sites/{site_id}/ask            -- §7 원안에 없던 추가: Module AGENT Q&A(§5)를 실제로 쓰려면 필요했음
 ```
 
-**구현 상태(2026-08-29)**: `api_server.py` — 위 목록 전부 구현·테스트 완료(`tests/test_api_server.py`, FastAPI `TestClient` 사용, GEE/Gemini 자격증명 불필요 — 둘 다 없으면 각 모듈이 자체 폴백으로 응답). 서버 시작 시 스냅샷들(Module RISK 조기 실증 결과, §5 Module RISK)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth Engine을 다시 부르지 않는다(§2.2 배치 모드 원칙). `/verify/backtest`는 store의 현재 risk_score + 등록된 현장점검 이력을 Module VERIFY로 채점한다 — 진짜 leakage-free backtest는 아직 아니다(§5 Module VERIFY 구현 상태 참조). `/sites/{site_id}/ask`·`/reports/weekly`는 Module AGENT를 감싼다 — `GEMINI_API_KEY`가 없으면 템플릿 폴백 응답을 그대로 반환한다(200 OK, `status:"degraded"`). `/sites/{site_id}/thumbnails`만 예외적으로 Earth Engine을 실시간으로 부른다(선택된 site 1건에 한해서만, §5 Module OBS 구현 상태 참조) — 나머지 엔드포인트는 전부 사전 계산된 스냅샷만 읽는다.
+**구현 상태(2026-08-29)**: `api_server.py` — 위 목록 전부 구현·테스트 완료(`tests/test_api_server.py`, FastAPI `TestClient` 사용, GEE/Gemini 자격증명 불필요 — 둘 다 없으면 각 모듈이 자체 폴백으로 응답). 서버 시작 시 스냅샷들(Module RISK 조기 실증 결과, §5 Module RISK)을 읽어 Module O의 인메모리 store를 채운다 — 매 요청마다 Earth Engine을 다시 부르지 않는다(§2.2 배치 모드 원칙). `/verify/backtest`는 store의 현재 inspection_priority_score + 등록된 현장점검 이력을 Module VERIFY로 채점한다 — 진짜 leakage-free backtest는 아직 아니다(§5 Module VERIFY 구현 상태 참조). `/sites/{site_id}/ask`·`/reports/weekly`는 Module AGENT를 감싼다 — `GEMINI_API_KEY`가 없으면 템플릿 폴백 응답을 그대로 반환한다(200 OK, `status:"degraded"`). `/sites/{site_id}/thumbnails`만 예외적으로 Earth Engine을 실시간으로 부른다(선택된 site 1건에 한해서만, §5 Module OBS 구현 상태 참조) — 나머지 엔드포인트는 전부 사전 계산된 스냅샷만 읽는다.
 
 ---
 

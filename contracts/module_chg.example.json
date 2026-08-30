@@ -3,12 +3,46 @@
   "fallback_tier": 1,
   "data": {
     "aoi_id": "YONGIN_YUBANG",
-    "anomaly_score": 0.72,
+    "anomaly_score": 0.707,
     "changed_area_ratio": 0.18,
     "changed_area_ratio_source": "pixel_diff",
     "change_type_hint": "vegetation_decline",
     "source": "observed",
-    "confidence_interval": null,
+    "signal_variability": [
+      0.699,
+      0.715
+    ],
+    "evidence_confidence": {
+      "level": "높음",
+      "score": 6,
+      "factors": [
+        {
+          "label": "유효 광학 장면 충분",
+          "effect": 1,
+          "detail": "현재기간 3장"
+        },
+        {
+          "label": "기준기간 관측 충분",
+          "effect": 1,
+          "detail": "기준기간 3장"
+        },
+        {
+          "label": "영상 품질 양호",
+          "effect": 1,
+          "detail": "현재기간 평균 구름 7%"
+        },
+        {
+          "label": "광학·SAR 센서 일치",
+          "effect": 2,
+          "detail": "서로 다른 센서가 같은 변화를 가리킴"
+        },
+        {
+          "label": "변화면적 픽셀 실측",
+          "effect": 1,
+          "detail": "NDVI 픽셀 단위 차분으로 직접 측정"
+        }
+      ]
+    },
     "sar_vv_delta": 1.2,
     "sar_anomaly": 0.4
   },

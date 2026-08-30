@@ -15,7 +15,7 @@ STAGES = (
     "관측",
     "변화탐지",
     "집계",
-    "위험도산정",
+    "우선순위산정",
     "우선순위큐등록",
     "현장점검등록",
     "결과입력",
@@ -41,8 +41,8 @@ class SiteStateStore:
         self,
         site_id: str,
         *,
-        risk_score: int | None,
-        risk_tier: str | None,
+        inspection_priority_score: int | None,
+        priority_tier: str | None,
         contributing_factors: list | None = None,
         extra: dict | None = None,
     ) -> dict:
@@ -51,10 +51,10 @@ class SiteStateStore:
             entry = self._sites.setdefault(
                 site_id, {"site_id": site_id, "stage": "관측", "inspections": []}
             )
-            entry["risk_score"] = risk_score
-            entry["risk_tier"] = risk_tier
+            entry["inspection_priority_score"] = inspection_priority_score
+            entry["priority_tier"] = priority_tier
             entry["contributing_factors"] = contributing_factors or []
-            if entry["stage"] in ("관측", "변화탐지", "집계", "위험도산정"):
+            if entry["stage"] in ("관측", "변화탐지", "집계", "우선순위산정"):
                 entry["stage"] = "우선순위큐등록"
             if extra:
                 entry.update(extra)

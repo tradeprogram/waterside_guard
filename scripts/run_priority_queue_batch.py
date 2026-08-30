@@ -117,15 +117,18 @@ def main() -> None:
             baseline_sar_vv_mean=baseline_sar_by_site.get(site_id),
             current_sar_vv_mean=current_sar_by_site.get(site_id),
             real_changed_area_ratio=changed_area_ratio_by_site.get(site_id),
+            recent_rainfall_mm=recent_rainfall_mm,
         )
 
         if computed is None:
             anomaly_score = None
             change_type_hint = "no_significant_change"
             contributing_factors: list = []
-            risk_score = None
-            risk_tier = None
+            inspection_priority_score = None
+            priority_tier = None
             sar_vv_delta = None
+            weight_coverage = None
+            evidence_confidence = None
         else:
             agg_result = agg_run(
                 {
@@ -141,9 +144,11 @@ def main() -> None:
             anomaly_score = computed["anomaly_score"]
             change_type_hint = computed["change_type_hint"]
             contributing_factors = risk_result["data"]["contributing_factors"]
-            risk_score = risk_result["data"]["risk_score"]
-            risk_tier = risk_result["data"]["risk_tier"]
+            inspection_priority_score = risk_result["data"]["inspection_priority_score"]
+            priority_tier = risk_result["data"]["priority_tier"]
             sar_vv_delta = computed.get("sar_vv_delta")
+            weight_coverage = risk_result["data"]["weight_coverage"]
+            evidence_confidence = computed.get("evidence_confidence")
 
         rows.append(
             {
@@ -151,14 +156,16 @@ def main() -> None:
                 "pnu": meta["pnu"],
                 "jibun": meta["jibun"],
                 "addr": meta["addr"],
-                "risk_score": risk_score,
-                "risk_tier": risk_tier,
+                "inspection_priority_score": inspection_priority_score,
+                "priority_tier": priority_tier,
+                "weight_coverage": weight_coverage,
                 "anomaly_score": anomaly_score,
                 "change_type_hint": change_type_hint,
                 "sar_vv_delta": sar_vv_delta,
                 "recent_rainfall_mm": recent_rainfall_mm,
                 "adjacent_to_water": adjacent_to_water,
                 "changed_area_ratio_source": computed.get("changed_area_ratio_source") if computed else None,
+                "evidence_confidence_json": json.dumps(evidence_confidence, ensure_ascii=False),
                 "contributing_factors_json": json.dumps(contributing_factors, ensure_ascii=False),
                 "baseline_scenes_json": json.dumps(baseline_scenes, ensure_ascii=False),
                 "current_scenes_json": json.dumps(current_scenes, ensure_ascii=False),
@@ -167,7 +174,7 @@ def main() -> None:
         )
 
     result_gdf = gpd.GeoDataFrame(rows, geometry="geometry", crs="EPSG:5179")
-    result_gdf = result_gdf.sort_values("risk_score", ascending=False, na_position="last").reset_index(drop=True)
+    result_gdf = result_gdf.sort_values("inspection_priority_score", ascending=False, na_position="last").reset_index(drop=True)
     result_gdf.insert(0, "rank", range(1, len(result_gdf) + 1))
 
     out_path = Path(args.output)
@@ -178,8 +185,8 @@ def main() -> None:
     summary = result_gdf.drop(columns="geometry").to_dict(orient="records")
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    n_success = int(result_gdf["risk_score"].notna().sum())
-    print(f"\n완료: {n_success}/{len(result_gdf)}건 위험도 산정 -> {out_path}, {summary_path}")
+    n_success = int(result_gdf["inspection_priority_score"].notna().sum())
+    print(f"\n완료: {n_success}/{len(result_gdf)}건 우선순위 산정 -> {out_path}, {summary_path}")
 
 
 if __name__ == "__main__":
