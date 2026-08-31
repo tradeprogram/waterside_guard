@@ -1,0 +1,1 @@
+{"status": "degraded", "fallback_tier": 2, "data": {"precision_at_k": {"k": 0, "value": null}, "recall_at_top20pct": null, "lift_at_k": null, "baseline_comparison": [], "coverage_curves": {}, "labeled_site_count": 0, "positive_count": 0}, "warnings": ["field_results에 site_id가 있는 항목이 없어 backtest를 수행할 수 없습니다."]}

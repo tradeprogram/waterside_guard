@@ -1,7 +1,26 @@
 // api_server.py(ARCHITECTURE.md §7)를 그대로 감싼 얇은 클라이언트.
 // 계산은 전부 백엔드가 한다 — 여기서는 fetch만 한다.
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8001";
+// 조회용 응답을 정적 파일에서 읽는 모드 — 배포본에서 켠다.
+// 산출물은 scripts/build_static_api.py가 ui/public/api/ 아래에 구워 둔다.
+// 이렇게 하는 이유: 조회 응답은 전부 사전계산 결과라 요청마다 계산할 이유가 없고,
+// 정적으로 내리면 콜드스타트나 함수 타임아웃으로 화면이 비는 사고가 원천 차단된다.
+export const STATIC_API = process.env.NEXT_PUBLIC_STATIC_API === "1";
+
+// 대화·등록처럼 실제 계산이 필요한 것만 남는 최소 백엔드 주소.
+// 정적 모드에서 이 값이 없으면 localhost로 새어나가지 않게 빈 문자열로 둔다.
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ?? (STATIC_API ? "" : "http://localhost:8001");
+
+/** 실시간 백엔드가 필요한 기능(AGENT 조회·보고서 생성·점검 등록)을 쓸 수 있는가. */
+export const HAS_LIVE_API = API_BASE !== "";
+
+function liveUrl(path: string): string {
+  if (!HAS_LIVE_API) {
+    throw new Error("실시간 분석 서버가 연결되지 않았습니다 (NEXT_PUBLIC_API_BASE 미설정)");
+  }
+  return `${API_BASE}${path}`;
+}
 
 export type ContributingFactor = {
   factor: string;
@@ -63,19 +82,26 @@ export type Scene = {
   indices: { ndvi_mean: number | null; ndmi_mean: number | null };
 };
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+/**
+ * 조회용 GET. 정적 모드면 `public/api/` 아래 구워 둔 JSON을, 아니면 라이브 API를 읽는다.
+ * 두 경로를 함께 받는 이유는 쿼리스트링이 파일명으로 바뀌기 때문이다
+ * (`/priority-queue/route?budget=10` -> `route/10.json`).
+ */
+async function getJson<T>(livePath: string, staticPath: string): Promise<T> {
+  const url = STATIC_API ? `/api/${staticPath}` : `${API_BASE}${livePath}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
   return res.json() as Promise<T>;
 }
 
 export function fetchSites() {
-  return getJson<Site[]>("/sites");
+  return getJson<Site[]>("/sites", "sites.json");
 }
 
 export function fetchPriorityQueue() {
   return getJson<Envelope<{ week_of: string; priority_queue: PriorityQueueEntry[]; queue_size: number; generated_at: string }>>(
-    "/priority-queue"
+    "/priority-queue",
+    "priority-queue.json"
   );
 }
 
@@ -94,12 +120,13 @@ export function fetchEvidence(siteId: string) {
     evidence_confidence: EvidenceConfidence | null;
     anomaly_method: "season_matched" | "two_period_diff" | "sar_only" | null;
     seasonal_anomaly: SeasonalAnomaly | null;
-  }>(`/sites/${encodeURIComponent(siteId)}/evidence`);
+  }>(`/sites/${encodeURIComponent(siteId)}/evidence`, `sites/${siteId}/evidence.json`);
 }
 
 export function fetchTimeseries(siteId: string) {
   return getJson<{ site_id: string; baseline_scenes: Scene[]; current_scenes: Scene[] }>(
-    `/sites/${encodeURIComponent(siteId)}/timeseries`
+    `/sites/${encodeURIComponent(siteId)}/timeseries`,
+    `sites/${siteId}/timeseries.json`
   );
 }
 
@@ -109,7 +136,8 @@ export type Thumbnail = { url: string; image_coordinates: [Corner, Corner, Corne
 
 export function fetchThumbnails(siteId: string) {
   return getJson<{ site_id: string; baseline: Thumbnail | null; current: Thumbnail | null; warnings: string[] }>(
-    `/sites/${encodeURIComponent(siteId)}/thumbnails`
+    `/sites/${encodeURIComponent(siteId)}/thumbnails`,
+    `sites/${siteId}/thumbnails.json`
   );
 }
 
@@ -124,7 +152,7 @@ export type HighResHistoryData = {
 };
 
 export function fetchHighRes(siteId: string) {
-  return getJson<HighResHistoryData>(`/sites/${encodeURIComponent(siteId)}/highres`);
+  return getJson<HighResHistoryData>(`/sites/${encodeURIComponent(siteId)}/highres`, `sites/${siteId}/highres.json`);
 }
 
 export async function postInspection(payload: {
@@ -138,7 +166,7 @@ export async function postInspection(payload: {
   photo_refs?: string[];
   note?: string;
 }) {
-  const res = await fetch(`${API_BASE}/inspections`, {
+  const res = await fetch(liveUrl("/inspections"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -196,7 +224,7 @@ export type RouteResult = {
 };
 
 export function fetchRoute(budget: number) {
-  return getJson<Envelope<RouteResult>>(`/priority-queue/route?budget=${budget}`);
+  return getJson<Envelope<RouteResult>>(`/priority-queue/route?budget=${budget}`, `route/${budget}.json`);
 }
 
 // module_verify/ablation.py — 라벨 없이 낼 수 있는 "방법 기여도" 근거.
@@ -218,15 +246,15 @@ export type AblationResult = {
 };
 
 export function fetchAblation(k: number) {
-  return getJson<Envelope<AblationResult>>(`/verify/ablation?k=${k}`);
+  return getJson<Envelope<AblationResult>>(`/verify/ablation?k=${k}`, `verify/ablation-${k}.json`);
 }
 
 export function fetchBacktest(k: number) {
-  return getJson<Envelope<BacktestResult>>(`/verify/backtest?period=current&k=${k}`);
+  return getJson<Envelope<BacktestResult>>(`/verify/backtest?period=current&k=${k}`, `verify/backtest-${k}.json`);
 }
 
 export async function generateWeeklyReport(weekOf: string) {
-  const res = await fetch(`${API_BASE}/reports/weekly`, {
+  const res = await fetch(liveUrl("/reports/weekly"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ week_of: weekOf }),
@@ -239,7 +267,7 @@ export async function generateWeeklyReport(weekOf: string) {
 export type AskTurn = { role: "user" | "agent"; text: string };
 
 export async function askSite(siteId: string, question: string, history: AskTurn[] = []) {
-  const res = await fetch(`${API_BASE}/sites/${encodeURIComponent(siteId)}/ask`, {
+  const res = await fetch(liveUrl(`/sites/${encodeURIComponent(siteId)}/ask`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     // 직전 대화를 함께 보낸다 — 없으면 "그럼 왜 그렇죠?" 같은 후속 질문이 맥락을 잃는다.

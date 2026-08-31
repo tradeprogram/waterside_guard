@@ -12,6 +12,7 @@ Module AGENT 연동 엔드포인트다 — §5 Module AGENT의 Q&A 계약을 실
 from __future__ import annotations
 
 import json
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -73,10 +74,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="수변생태벨트 점검 우선순위 지원시스템 API", version="0.1.0", lifespan=lifespan)
 
+# 개발 서버(Next.js)는 매번 다른 포트로 뜰 수 있어(autoPort) localhost 전 포트를 허용한다.
+# 배포본은 그것만으로는 부족하므로 ALLOWED_ORIGINS(쉼표 구분)로 실제 도메인을 더한다.
+# 예: ALLOWED_ORIGINS=https://waterside-guard.vercel.app
+_allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    # 개발 서버(Next.js)가 매번 다른 포트로 뜰 수 있어(autoPort) localhost 전 포트를 허용한다.
-    # 프로토타입 범위 — 실제 배포 시 특정 origin으로 좁힐 것.
+    allow_origins=_allowed_origins,
     allow_origin_regex=r"http://localhost:\d+",
     allow_methods=["*"],
     allow_headers=["*"],

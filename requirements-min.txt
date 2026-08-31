@@ -1,0 +1,6 @@
+# 최소 백엔드(api_min.py) 전용 — 조회는 정적 파일로 내리고 대화·등록만 남긴 구성.
+# geopandas/pyproj/shapely/matplotlib/earthengine-api가 빠져 컨테이너가 크게 가벼워진다.
+fastapi
+uvicorn
+python-dotenv
+google-genai  # Module AGENT — Gemini function calling
