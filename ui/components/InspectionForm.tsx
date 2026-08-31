@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { postInspection } from "@/lib/api";
+import { useWaitingNotice } from "@/lib/useWaitingNotice";
 
 // 중간점검 리서치 §Field Verification Loop가 제시한 최소 taxonomy.
 // 이 분류 하나가 (1) 오탐 원인 분석, (2) 향후 학습 라벨, (3) 성능검증의 정답지가 된다 —
@@ -25,6 +26,12 @@ export const CHANGE_TYPES = [
   { value: "other", label: "기타" },
 ];
 
+// 등록은 원래 즉시 끝난다 — 몇 초만 넘어가도 서버가 자고 있었다는 뜻이다.
+const SUBMIT_STAGES = [
+  { after: 4, text: "분석 서버에 등록하는 중입니다" },
+  { after: 12, text: "서버가 절전에서 깨어나는 중일 수 있습니다 — 최대 1분까지 기다려 주십시오" },
+];
+
 export const CHANGE_TYPE_LABEL: Record<string, string> = Object.fromEntries(
   CHANGE_TYPES.map((c) => [c.value, c.label])
 );
@@ -37,6 +44,7 @@ export default function InspectionForm({ siteId, onSubmitted }: { siteId: string
   const [photoRef, setPhotoRef] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const waiting = useWaitingNotice(submitting, SUBMIT_STAGES);
 
   async function submit() {
     setSubmitting(true);
@@ -127,6 +135,11 @@ export default function InspectionForm({ siteId, onSubmitted }: { siteId: string
       <button onClick={submit} disabled={submitting} className="btn-primary px-3 py-2 text-[13px] font-semibold">
         {submitting ? "등록 중" : "점검결과 등록"}
       </button>
+      {waiting && (
+        <p className="text-[11px] leading-snug text-ink-3" role="status" aria-live="polite">
+          {waiting}
+        </p>
+      )}
       {error && (
         <p className="rounded px-2 py-1.5 text-[11px]" style={{ background: "var(--danger-soft)", color: "var(--danger)" }}>
           등록에 실패했습니다: {error}

@@ -17,6 +17,7 @@ import EvidenceConfidence from "./EvidenceConfidence";
 import AblationPanel from "./AblationPanel";
 import { TIER_BADGE, TIER_COLOR, TIER_ORDER } from "@/lib/tiers";
 import { useDialog } from "@/lib/useDialog";
+import { useWaitingNotice } from "@/lib/useWaitingNotice";
 
 type Evidence = Awaited<ReturnType<typeof fetchEvidence>>;
 
@@ -30,6 +31,13 @@ type ReportData = {
   narrative: string | null;
   narrativeDegraded: boolean;
 };
+
+// 보고서는 종합 의견(Gemini)과 배정 필지별 근거 조회를 함께 돌려 시간이 걸린다.
+const REPORT_STAGES = [
+  { after: 5, text: "필지별 근거를 모으는 중입니다" },
+  { after: 20, text: "종합 의견을 작성하는 중입니다 — 30초 이상 걸릴 수 있습니다" },
+  { after: 50, text: "분석 서버가 절전에서 깨어나는 중일 수 있습니다. 최초 요청은 1분 이상 걸리기도 합니다" },
+];
 
 // 상세 근거 카드는 상위 몇 필지까지 실을지 — 전부 실으면 보고서가 수십 장이 된다.
 const DETAIL_LIMIT = 5;
@@ -364,6 +372,7 @@ export default function WeeklyReportModal({ budget, onClose }: { budget: number;
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const waiting = useWaitingNotice(loading, REPORT_STAGES);
 
   async function generate() {
     setLoading(true);
@@ -467,8 +476,8 @@ export default function WeeklyReportModal({ budget, onClose }: { budget: number;
             <ReportBody data={data} budget={budget} />
           ) : (
             <div className="py-16 text-center">
-              <p className="text-[13px] text-ink-2">
-                {loading ? "보고서를 생성하고 있습니다" : "기준일 확인 후 보고서 생성 버튼을 선택해 주십시오."}
+              <p className="text-[13px] text-ink-2" role="status" aria-live="polite">
+                {loading ? (waiting ?? "보고서를 생성하고 있습니다") : "기준일 확인 후 보고서 생성 버튼을 선택해 주십시오."}
               </p>
               {!loading && (
                 <p className="mx-auto mt-2 max-w-md text-[11px] leading-relaxed text-ink-3">

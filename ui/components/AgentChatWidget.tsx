@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { askSite, type AskTurn } from "@/lib/api";
 import TypewriterText from "./TypewriterText";
+import { useWaitingNotice } from "@/lib/useWaitingNotice";
 
 type Message = {
   role: "user" | "agent";
@@ -28,6 +29,14 @@ const QUICK_PROMPTS = [
 ];
 
 // tool 이름을 실무자가 읽을 수 있는 말로 — 답변이 무엇을 근거로 나왔는지 보여준다.
+// AGENT 응답은 정상일 때도 30~40초 걸린다(실측). 그 구간을 고장처럼 보이게 하면 안 되므로
+// 40초까지는 무엇을 하고 있는지 설명하고, 그 이후에야 절전 해제 가능성을 언급한다.
+const ASK_STAGES = [
+  { after: 6, text: "위성 관측 근거를 확인하는 중입니다" },
+  { after: 20, text: "근거를 정리하는 중입니다 — 보통 30~40초 걸립니다" },
+  { after: 45, text: "분석 서버가 절전에서 깨어나는 중일 수 있습니다. 최초 요청은 1분 이상 걸리기도 합니다" },
+];
+
 const TOOL_LABEL: Record<string, string> = {
   get_risk_evidence: "우선순위 근거",
   get_timeseries_summary: "위성 관측 시계열",
@@ -103,6 +112,7 @@ function ChatThread({ siteId, siteLabel }: { siteId: string; siteLabel: string }
   }
 
   const canSend = !loading && question.trim().length > 0;
+  const waiting = useWaitingNotice(loading, ASK_STAGES);
 
   return (
     <>
@@ -176,17 +186,20 @@ function ChatThread({ siteId, siteLabel }: { siteId: string; siteLabel: string }
         ))}
 
         {loading && (
-          <div
-            className="flex items-center gap-1 self-start rounded-xl rounded-tl-sm px-3 py-2.5"
-            style={{ background: "rgba(108,123,138,0.10)" }}
-          >
-            {[0, 1, 2].map((i) => (
-              <span
-                key={i}
-                className="h-1.5 w-1.5 animate-bounce rounded-full"
-                style={{ background: "var(--ink-3)", animationDelay: `${i * 0.15}s` }}
-              />
-            ))}
+          <div className="flex max-w-[88%] flex-col gap-1 self-start" role="status" aria-live="polite">
+            <div
+              className="flex items-center gap-1 self-start rounded-xl rounded-tl-sm px-3 py-2.5"
+              style={{ background: "rgba(108,123,138,0.10)" }}
+            >
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="h-1.5 w-1.5 animate-bounce rounded-full"
+                  style={{ background: "var(--ink-3)", animationDelay: `${i * 0.15}s` }}
+                />
+              ))}
+            </div>
+            {waiting && <p className="text-[10px] leading-snug text-ink-3">{waiting}</p>}
           </div>
         )}
       </div>
