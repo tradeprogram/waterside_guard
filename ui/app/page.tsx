@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import {
   fetchBacktest,
   fetchPriorityQueue,
@@ -94,17 +95,18 @@ export default function Home() {
       <div className="app-shell flex h-screen w-screen flex-col bg-bg text-ink">
         <header className="glass-bar z-30 flex shrink-0 items-center justify-between px-5 py-2.5">
           <div className="flex items-center gap-3">
-            {/* 브랜드 마크 — 수변(물결)과 보호(방패)를 겹친 형태 */}
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-lg shadow-sm"
-              style={{ background: "linear-gradient(135deg, var(--brand), var(--brand-2))" }}
-              aria-hidden
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="#fff" strokeWidth={1.9}>
-                <path d="M12 3l7 3v5.5c0 4.3-2.9 7.9-7 9.5-4.1-1.6-7-5.2-7-9.5V6l7-3z" strokeLinejoin="round" />
-                <path d="M8 12.5c1-1 2-1 3 0s2 1 3 0" strokeLinecap="round" />
-              </svg>
-            </span>
+            {/* 기관 CI — 원본이 투명 배경(RGBA)이라 별도 배경판을 두지 않는다.
+                375x226 비율을 유지하려고 높이만 고정하고 폭은 auto로 둔다. */}
+            <Image
+              src="/keci_logo.png"
+              alt="한국환경보전원"
+              width={375}
+              height={226}
+              priority
+              className="h-10 w-auto"
+            />
+            {/* 기관 CI와 시스템명 사이 구분선 — 둘이 한 덩어리로 읽히지 않게 한다 */}
+            <span className="h-8 w-px shrink-0 bg-line" aria-hidden />
             <div>
               <h1 className="text-[14px] font-bold leading-tight tracking-tight">수변생태벨트 점검 우선순위 지원시스템</h1>
               <p className="text-[11px] leading-tight text-ink-3">한강수계 매수토지 · 위성 변화탐지 기반 현장점검 순서 산정</p>
