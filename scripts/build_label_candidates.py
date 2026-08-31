@@ -2,7 +2,7 @@
 
 **왜 이게 최우선인가**: 현재 프로젝트의 단일 최대 약점은 "실제 라벨이 없다"는 것이다.
 Module VERIFY의 Precision@K 함수가 테스트를 통과한다는 건 *계산 코드가 맞다*는 뜻이지
-*수변가드의 실제 탐지 정확도가 높다*는 뜻이 아니다.
+*본 시스템의 실제 탐지 정확도가 높다*는 뜻이 아니다.
 
 **이 스크립트가 하는 일**: 판독할 필지를 편향 없이 뽑고, 각 필지의 **고해상도 실사 영상**을
 시기별로 이어붙여 필지 경계를 표시한 뒤, 브라우저에서 바로 판독할 수 있는 HTML을 만든다.
@@ -158,7 +158,7 @@ def _render_html(cards: list[dict], out_dir: Path) -> Path:
         )
 
     page = f"""<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><title>수변가드 Ground Truth 판독</title>
+<html lang="ko"><head><meta charset="utf-8"><title>점검 우선순위 Ground Truth 판독</title>
 <style>
  body {{ font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #171717; }}
  .guide {{ position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 2px solid #171717;
@@ -184,7 +184,7 @@ def _render_html(cards: list[dict], out_dir: Path) -> Path:
             box-shadow: 0 3px 10px rgba(0,0,0,.25); }}
 </style></head><body>
 <div class="guide">
-  <h1>수변가드 Ground Truth 판독 — {len(cards)}건</h1>
+  <h1>점검 우선순위 Ground Truth 판독 — {len(cards)}건</h1>
   <ul>
     <li>빨간 테두리 안 <strong>필지만</strong> 보고 판정하세요. 주변은 맥락 참고용입니다.</li>
     <li class="critical">초록↔갈색(잎이 있고 없고)은 변화가 <u>아닙니다</u>. 영상마다 촬영 계절이 달라서 생기는 차이입니다.

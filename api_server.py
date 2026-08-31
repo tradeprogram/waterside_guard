@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Waterside Guard API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="수변생태벨트 점검 우선순위 지원시스템 API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

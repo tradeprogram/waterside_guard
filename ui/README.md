@@ -1,4 +1,4 @@
-# 수변가드 AI — 대시보드 (`ui/`)
+# 수변생태벨트 점검 우선순위 지원시스템 — 대시보드 (`ui/`)
 
 Next.js + MapLibre GL JS. ARCHITECTURE.md §8 UI·대시보드 설계 중 지도/Priority Queue/Evidence Card/Time Series/Inspection을 구현한 것. 계산은 전부 `../api_server.py`(FastAPI)가 하고, 이 앱은 fetch만 한다.
 

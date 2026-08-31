@@ -2,7 +2,7 @@
 "site_attributes" 중 `adjacent_to_water`).
 
 이 값은 지금까지 항상 `None`이었다(KECI 내부 자산 DB 접근 불가, § Module AGG
-구현 상태) — 그런데 "수변가드 AI"라는 이름의 서비스가 정작 수변 인접 여부를
+구현 상태) — 그런데 "수변"을 이름에 단 시스템이 정작 수변 인접 여부를
 못 채우고 있는 건 어색한 공백이고, 사실 공개 데이터(JRC Global Surface
 Water, 위성 관측 기반 전세계 수체 이력 지도)로 직접 계산 가능하다.
 
