@@ -107,7 +107,9 @@ function ChatThread({ siteId, siteLabel }: { siteId: string; siteLabel: string }
   return (
     <>
       <div className="shrink-0 border-b border-line px-4 py-2.5">
-        <p className="text-[13px] font-bold">AI 근거 조회</p>
+        <p className="text-[13px] font-bold tracking-wide" style={{ color: "var(--brand)" }}>
+          AGENT
+        </p>
         <p className="truncate text-[11px] text-ink-3">{siteLabel}</p>
       </div>
 
@@ -256,7 +258,9 @@ export default function AgentChatWidget({ siteId, siteLabel }: { siteId: string 
           ) : (
             <>
               <div className="shrink-0 border-b border-line px-4 py-2.5">
-                <p className="text-[13px] font-bold">AI 근거 조회</p>
+                <p className="text-[13px] font-bold tracking-wide" style={{ color: "var(--brand)" }}>
+                  AGENT
+                </p>
               </div>
               <div className="flex flex-1 items-center justify-center p-6 text-center text-[13px] leading-relaxed text-ink-3">
                 지도 또는 목록에서 점검 필지를 먼저 선택해 주십시오.
@@ -268,7 +272,7 @@ export default function AgentChatWidget({ siteId, siteLabel }: { siteId: string 
 
       <button
         onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "AI 근거 조회 닫기" : "AI 근거 조회 열기"}
+        aria-label={open ? "AGENT 조회창 닫기" : "AGENT 조회창 열기"}
         aria-expanded={open}
         // 유리 재질 버튼 — 위성지도(어두운 영상) 위에 떠 있으므로 흰 유리에 브랜드 그린
         // 글자·테두리로 대비를 만든다. 불투명 원보다 화면을 덜 가리면서도 눈에 띈다.
