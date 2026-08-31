@@ -101,11 +101,19 @@ body {
   box-shadow: var(--shadow);
 }
 
+/* 상단 바는 흰 유리가 아니라 **그린 톤 유리**로 둔다 — 기관 CI가 얹히는 자리이고,
+   본문 패널(흰 유리)과 층이 구분돼야 화면이 납작해 보이지 않는다. 초록을 옅게(0.55~0.72)
+   섞어 유리 재질은 유지하면서 색만 입힌다. 아래 경계선도 초록 쪽으로 살짝 진하게 준다. */
 .glass-bar {
-  background: var(--surface-glass);
+  background: linear-gradient(
+    180deg,
+    rgba(236, 247, 241, 0.72),
+    rgba(226, 242, 234, 0.62)
+  );
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(0, 121, 74, 0.16);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
 }
 
 .card {

@@ -6,6 +6,11 @@ import { useEffect, useRef, useState } from "react";
 // 인라인 함수라 ref에 담아 최신 값만 읽는다(§MapView.tsx의 onSelectSiteRef와 같은 패턴).
 // AgentChatWidget/WeeklyReportModal 등 Gemini 응답을 보여주는 곳에서 공통으로 쓴다.
 export default function TypewriterText({ text, onDone }: { text: string; onDone?: () => void }) {
+  // 모션을 줄이도록 설정한 사용자에겐 타이핑 효과가 방해가 된다 — 전문을 바로 보여준다.
+  // 마운트 시 한 번만 읽고, 이후에는 렌더에서 text를 그대로 쓴다(effect 안에서 setState 하지 않기 위함).
+  const [reduceMotion] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  );
   const [shown, setShown] = useState("");
   const onDoneRef = useRef(onDone);
   useEffect(() => {
@@ -13,6 +18,10 @@ export default function TypewriterText({ text, onDone }: { text: string; onDone?
   }, [onDone]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      onDoneRef.current?.();
+      return;
+    }
     let i = 0;
     let timer: ReturnType<typeof setTimeout>;
     const step = () => {
@@ -23,7 +32,7 @@ export default function TypewriterText({ text, onDone }: { text: string; onDone?
     };
     timer = setTimeout(step, 15);
     return () => clearTimeout(timer);
-  }, [text]);
+  }, [text, reduceMotion]);
 
-  return <>{shown}</>;
+  return <>{reduceMotion ? text : shown}</>;
 }

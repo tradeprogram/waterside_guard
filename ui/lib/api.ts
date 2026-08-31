@@ -236,11 +236,14 @@ export async function generateWeeklyReport(weekOf: string) {
   return body as Envelope<{ week_of: string; report_text: string; tools_used: string[] }>;
 }
 
-export async function askSite(siteId: string, question: string) {
+export type AskTurn = { role: "user" | "agent"; text: string };
+
+export async function askSite(siteId: string, question: string, history: AskTurn[] = []) {
   const res = await fetch(`${API_BASE}/sites/${encodeURIComponent(siteId)}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    // 직전 대화를 함께 보낸다 — 없으면 "그럼 왜 그렇죠?" 같은 후속 질문이 맥락을 잃는다.
+    body: JSON.stringify({ question, history }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(body));

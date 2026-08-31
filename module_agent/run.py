@@ -14,12 +14,27 @@ from common.envelope import error_envelope, make_envelope
 from module_agent.gemini_client import init_client, model_name
 from module_agent.tools import get_inspection_history, get_risk_evidence, get_timeseries_summary
 
-SYSTEM_INSTRUCTION = (
-    "당신은 수변생태벨트 점검 우선순위 지원시스템의 근거 조회 에이전트입니다. 점검 우선순위 점수를 스스로 계산하거나 새로운 숫자를 "
-    "만들어내지 마세요 — 제공된 tool을 호출해 얻은 값만 근거로 답하세요. 종(種) 판독(어떤 "
-    "식물·현상인지 확정)이나 확정 진단은 하지 말고, 관측된 변화를 있는 그대로 담당자에게 "
-    "설명하세요. 한국어로, 현장 담당자가 바로 이해할 수 있게 6문장 이내로 답하세요."
-)
+SYSTEM_INSTRUCTION = """당신은 수변생태벨트 점검 우선순위 지원시스템의 근거 조회 에이전트입니다.
+현장 담당자가 출동 전에 근거를 확인하려고 묻습니다.
+
+규칙:
+1. 점수를 스스로 계산하거나 새로운 숫자를 만들지 마세요. 제공된 tool을 호출해 얻은 값만 씁니다.
+
+2. 무엇이 훼손됐는지 판정하지 마세요. change_type_hint(vegetation_decline 등)는 확정된 원인이
+   아니라 계절 패턴과 다른 변화가 있다는 선별 신호일 뿐입니다. "식생이 감소했다"가 아니라
+   "식생 활력이 낮아지는 방향의 신호가 관측됐다"처럼 쓰고, 영문 코드값은 노출하지 말고 한국어로
+   옮기세요. 종(種) 판독과 확정 진단은 금지입니다 — 확정은 현장과 드론의 몫입니다.
+
+3. 불확실성을 빠뜨리지 마세요. 다음에 해당하면 반드시 언급합니다.
+   - weight_coverage가 1 미만이면, 전체 근거 중 몇 %만 확보된 상태에서 산정된 점수인지
+   - evidence_confidence의 effect가 음수인 항목(강우 교란, 센서 불일치, 관측 부족 등).
+     특히 최근 강우가 많은데 습윤 신호가 잡힌 경우, 강우를 "점수를 올린 요인"으로만 소개하지 말고
+     기상에 의한 변화일 수 있어 신뢰도를 낮추는 요인이라는 점을 함께 밝히세요.
+   - changed_area_ratio가 픽셀 실측이 아니라 근사치인 경우
+
+4. 마지막 문장은 현장에서 무엇을 확인하면 되는지로 맺으세요.
+
+한국어 '-습니다'체로, 6문장 이내로 답하세요."""
 
 
 def _template_answer(site_id: str) -> str:
@@ -58,9 +73,31 @@ def _bound_tools(site_id: str, tools_used: list[str]) -> list:
     ]
 
 
+# 직전 대화 몇 턴을 함께 보낼지 — 길수록 토큰만 먹고 tool 호출 정확도가 떨어진다.
+HISTORY_TURNS = 8
+
+
+def _as_contents(question: str, history: list[dict] | None) -> list:
+    """이전 대화를 Gemini contents 형식으로 바꾼다.
+
+    이게 없으면 "그럼 왜 그렇죠?" 같은 후속 질문이 앞 맥락을 잃고 매번 처음부터 묻는 꼴이 된다
+    (tradeprogram/policymaps agent가 history를 최근 8턴만 실어 보내는 방식을 따랐다).
+    """
+    contents: list = []
+    for turn in (history or [])[-HISTORY_TURNS:]:
+        text = (turn.get("text") or "").strip()
+        if not text:
+            continue
+        role = "user" if turn.get("role") == "user" else "model"
+        contents.append({"role": role, "parts": [{"text": text}]})
+    contents.append({"role": "user", "parts": [{"text": question}]})
+    return contents
+
+
 def run(input: dict) -> dict:
     site_id = input.get("site_id")
     question = input.get("question")
+    history = input.get("history")
 
     if not site_id or not question:
         return error_envelope("site_id/question이 필요합니다.", fallback_tier=3)
@@ -81,7 +118,7 @@ def run(input: dict) -> dict:
 
         response = client.models.generate_content(
             model=model_name(),
-            contents=question,
+            contents=_as_contents(question, history),
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
                 tools=_bound_tools(site_id, tools_used),

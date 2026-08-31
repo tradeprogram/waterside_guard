@@ -494,15 +494,28 @@ def create_inspection(payload: InspectionRequest) -> dict:
     return result
 
 
+class AskTurn(BaseModel):
+    role: str
+    text: str
+
+
 class AskRequest(BaseModel):
     question: str
+    # 직전 대화 — 후속 질문이 앞 맥락을 잃지 않게 클라이언트가 함께 보낸다.
+    history: list[AskTurn] | None = None
 
 
 @app.post("/sites/{site_id}/ask")
 def ask_site(site_id: str, payload: AskRequest) -> dict:
     if store.get(site_id) is None:
         raise HTTPException(404, f"site '{site_id}' not found")
-    return agent_run({"site_id": site_id, "question": payload.question})
+    return agent_run(
+        {
+            "site_id": site_id,
+            "question": payload.question,
+            "history": [t.model_dump() for t in (payload.history or [])],
+        }
+    )
 
 
 class WeeklyReportRequest(BaseModel):

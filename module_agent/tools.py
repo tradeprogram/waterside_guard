@@ -20,6 +20,13 @@ def get_risk_evidence(site_id: str) -> dict:
         "contributing_factors": entry.get("contributing_factors", []),
         "anomaly_score": entry.get("anomaly_score"),
         "change_type_hint": entry.get("change_type_hint"),
+        # 불확실성 맥락 — 이걸 빼면 Agent가 "왜 이 점수인가"만 말하고 "이 점수를 얼마나
+        # 믿을 수 있는가"는 말하지 못한다. 실측으로 확인한 문제다(2026-08-31): 이 세 값이
+        # 없던 동안 답변이 강우 148mm를 '점수를 올린 요인'으로만 소개하고, 같은 강우가
+        # 신뢰도를 깎는 교란 요인이라는 사실은 빠뜨렸다.
+        "weight_coverage": entry.get("weight_coverage"),
+        "changed_area_ratio_source": entry.get("changed_area_ratio_source"),
+        "evidence_confidence": entry.get("evidence_confidence"),
     }
 
 
