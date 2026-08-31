@@ -48,8 +48,8 @@ function waitForSource(map: MapLibreMap, sourceId: string, callback: () => void)
 const TIER_COLOR: Record<string, string> = {
   "1순위": "#c0392b",
   "2순위": "#e67e22",
-  "3순위": "#d4a017",
-  정상: "#5b8c6e",
+  "3순위": "#a3b545",
+  정상: "#009058",
 };
 
 export default function MapView({
@@ -134,7 +134,7 @@ export default function MapView({
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
           // 점선 = "직선거리 기준 방문 순서"이지 실제 주행 경로가 아니라는 시각적 신호
-          paint: { "line-color": "#277086", "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": 0.9 },
+          paint: { "line-color": "#00794a", "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": 0.9 },
         });
 
         map.addSource("sites", { type: "geojson", data: { type: "FeatureCollection", features: [] } });

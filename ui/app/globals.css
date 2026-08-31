@@ -1,24 +1,29 @@
 @import "tailwindcss";
 
-/* 디자인 토큰 — tradeprogram/policymaps의 :root를 계승한다.
-   청록 계열은 한국환경보전원의 정체성(물·환경)과 맞고, 기존 프로젝트들과 시각 언어가
-   통일된다. 다만 **의미색(등급·경고·정상)은 브랜드색으로 물들이지 않는다** — 1순위와
-   3순위가 비슷해 보이면 그 순간 도구로서 실패한다. 브랜드색은 크롬(헤더·활성상태·포커스)에만
-   쓰고, 데이터에는 판별력이 확보된 의미색만 쓴다. */
+/* 디자인 토큰 — 구조는 tradeprogram/policymaps의 :root를 계승하되, 색은 한국환경보전원
+   CI에서 뽑은 그린 계열로 맞췄다(로고 원본에서 실측: 주색 #009058, 보조 라임 #90d000).
+   글라스·그림자·반경 같은 재질 속성은 그대로 두고 색상 계열만 바꾼 것이다.
+
+   **의미색(등급·경고·정상)은 브랜드색으로 덮지 않는다** — 1순위와 3순위가 비슷해 보이면
+   그 순간 도구로서 실패한다. 브랜드색은 크롬(헤더·활성상태·포커스)에 쓰고, 데이터에는
+   판별력이 확보된 의미색만 쓴다. */
 :root {
-  --bg: #eef3f5;
+  --bg: #eef4f0;
   --surface: #ffffff;
   --surface-glass: rgba(255, 255, 255, 0.76);
   --surface-glass-strong: rgba(255, 255, 255, 0.88);
   --ink: #1a1d21;
   --ink-2: #545c66;
   --ink-3: #8a929c;
-  --line: rgba(108, 123, 138, 0.24);
-  --line-strong: rgba(108, 123, 138, 0.38);
-  --brand: #277086;
-  --brand-2: #3a8b9c;
-  --brand-soft: #e7f4f6;
-  --accent: #6fb7be;
+  --line: rgba(104, 126, 112, 0.24);
+  --line-strong: rgba(104, 126, 112, 0.38);
+  /* 한국환경보전원 CI 실측색(#009058)에서 파생한 그린 계열.
+     --brand는 본문·아이콘에 쓰므로 흰 배경 대비 5.48:1이 나오는 톤까지 어둡게 잡았다
+     (로고 원색 #009058은 4.09:1이라 작은 글자에 쓰기엔 부족하다). */
+  --brand: #00794a;
+  --brand-2: #009058;
+  --brand-soft: #e6f4ed;
+  --accent: #5cb88a;
   --warn: #b7791f;
   --warn-soft: #fdf6e3;
   --danger: #c0392b;
@@ -29,16 +34,17 @@
   --est: #7d5ba6;
   --est-soft: #f2edf9;
   --radius: 8px;
-  --shadow: 0 16px 40px rgba(39, 68, 82, 0.1), 0 2px 8px rgba(16, 24, 40, 0.06);
+  --shadow: 0 16px 40px rgba(16, 68, 46, 0.1), 0 2px 8px rgba(16, 24, 40, 0.06);
   --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
   --glass-blur: blur(16px) saturate(1.15);
 
-  /* 점검 우선순위 등급 — 판별력이 최우선이라 색상환에서 최대한 벌려 놓는다.
-     figure(scripts/generate_figures.py TIER_COLOR)와 같은 값을 쓴다. */
+  /* 점검 우선순위 등급 — 적색(경고)에서 기관 CI 그린까지 이어지는 2색 구성.
+     색상뿐 아니라 명도도 인접 단계마다 0.06 이상 벌려 적록색약에서도 순서가 남게 했다.
+     ui/lib/tiers.ts, scripts/generate_figures.py의 TIER_COLOR와 같은 값을 쓴다. */
   --tier-1: #c0392b;
   --tier-2: #e67e22;
-  --tier-3: #d4a017;
-  --tier-normal: #5b8c6e;
+  --tier-3: #a3b545;
+  --tier-normal: #009058;
 }
 
 @theme inline {
@@ -64,7 +70,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* 이 화면은 밝은 테마 하나로 고정한다 — 기관 업무화면이고, 등급 색(적/주/황/녹)의 판별력을
+/* 이 화면은 밝은 테마 하나로 고정한다 — 기관 업무화면이고, 등급 램프의 판별력을
    두 테마에서 동시에 보장하려면 팔레트를 두 벌 검증해야 한다. 선언하지 않으면 OS가 다크일 때
    select·input 같은 네이티브 컨트롤만 어둡게 렌더되어 화면이 섞인다. */
 :root {
@@ -109,18 +115,18 @@ body {
 }
 
 /* ── 컨트롤 ──────────────────────────────────────────────────────── */
-/* 떠 있는 AI 버튼 — 위성영상 위에 놓이므로 흰 유리 + 청록 글자로 대비를 만든다 */
+/* 떠 있는 AI 버튼 — 위성영상 위에 놓이므로 흰 유리 + 브랜드 그린 글자로 대비를 만든다 */
 .glass-fab {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(231, 244, 246, 0.72));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(230, 244, 237, 0.72));
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border: 1px solid rgba(111, 183, 190, 0.65);
+  border: 1px solid rgba(92, 184, 138, 0.65);
   color: var(--brand);
-  box-shadow: 0 8px 24px rgba(39, 68, 82, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  box-shadow: 0 8px 24px rgba(16, 68, 46, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .glass-fab:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(231, 244, 246, 0.85));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(230, 244, 237, 0.85));
   border-color: var(--accent);
 }
 
@@ -132,7 +138,7 @@ body {
 .pill-active {
   background: linear-gradient(135deg, var(--brand), var(--brand-2));
   color: #fff;
-  box-shadow: 0 2px 8px rgba(39, 112, 134, 0.32);
+  box-shadow: 0 2px 8px rgba(0, 121, 74, 0.32);
 }
 
 .btn-ghost {
@@ -158,7 +164,7 @@ body {
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
-  box-shadow: 0 4px 12px rgba(39, 112, 134, 0.28);
+  box-shadow: 0 4px 12px rgba(0, 121, 74, 0.28);
 }
 
 .btn-primary:disabled {
@@ -180,7 +186,7 @@ body {
 .field:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(111, 183, 190, 0.24);
+  box-shadow: 0 0 0 3px rgba(92, 184, 138, 0.28);
 }
 
 /* 키보드 사용자를 위한 포커스 링 — 브랜드색으로 통일한다 */

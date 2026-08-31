@@ -37,12 +37,15 @@ INK = "#171717"
 MUTED = "#737373"
 FAINT = "#d4d4d4"
 RED = "#c0392b"
-GREEN = "#15803d"
-BLUE = "#2563eb"
+# 기관 CI에서 뽑은 두 계열. BLUE라는 이름은 호출부 호환으로 남겼지만 값은 CI 주색(그린)이다.
+GREEN = "#009058"  # CI 주색 — 긍정적 결과(오탐 0건, 절감률)에 쓴다
+BLUE = "#00794a"   # 화면의 --brand와 같은 값 — 위성·시스템 단계
+LIME = "#6a8f00"   # CI 보조색(#90d000) 계열 — 현장·드론 단계. BLUE와 색상각이 80도 이상
+                   # 벌어져야 F3 도식에서 두 계열이 구분된다(둘 다 초록이면 도식이 뭉개짐).
 ORANGE = "#e67e22"
 # ui/lib/tiers.ts, ui/app/globals.css의 --tier-* 와 반드시 같은 값 — 화면과 제안서 그림에서
 # 같은 등급이 다른 색으로 보이면 그 자체로 신뢰를 깎는다.
-TIER_COLOR = {"1순위": "#c0392b", "2순위": "#e67e22", "3순위": "#d4a017", "정상": "#5b8c6e"}
+TIER_COLOR = {"1순위": "#c0392b", "2순위": "#e67e22", "3순위": "#a3b545", "정상": "#009058"}
 
 
 def _api(path: str) -> dict:
@@ -437,20 +440,20 @@ def fig_workflow() -> None:
     ax.axis("off")
 
     _box(ax, 2.5, 7.9, 5, 0.85, "광역 위성 관측\nSentinel-2 · Sentinel-1 · (국토위성)", "#f5f5f5", FAINT, 10)
-    _box(ax, 2.5, 6.4, 5, 0.85, "변화 선별\n계절 정합 기준선 · 센서 일치 · 품질 게이트", "#eff6ff", BLUE, 10)
-    _box(ax, 2.5, 4.9, 5, 0.85, "점검 우선순위 + 근거\n왜 이 순위인가 · 증거 신뢰도", "#eff6ff", BLUE, 10, "bold")
-    _box(ax, 2.5, 3.4, 5, 0.85, "주간 점검 가능 인력에 맞춘 상위 N필지\n권역별 통합 방문 순서", "#eff6ff", BLUE, 10)
+    _box(ax, 2.5, 6.4, 5, 0.85, "변화 선별\n계절 정합 기준선 · 센서 일치 · 품질 게이트", "#e6f4ed", BLUE, 10)
+    _box(ax, 2.5, 4.9, 5, 0.85, "점검 우선순위 + 근거\n왜 이 순위인가 · 증거 신뢰도", "#e6f4ed", BLUE, 10, "bold")
+    _box(ax, 2.5, 3.4, 5, 0.85, "주간 점검 가능 인력에 맞춘 상위 N필지\n권역별 통합 방문 순서", "#e6f4ed", BLUE, 10)
 
-    _box(ax, 1.35, 1.6, 3.15, 0.85, "현장직원 확인", "#f0fdf4", GREEN, 10)
-    _box(ax, 5.5, 1.6, 3.15, 0.85, "드론 확인", "#f0fdf4", GREEN, 10)
-    _box(ax, 2.5, 0.2, 5, 0.85, "확정 · 결과 기록\n변화 유형 · 사진 · 오탐 사유", "#f0fdf4", GREEN, 10, "bold")
+    _box(ax, 1.35, 1.6, 3.15, 0.85, "현장직원 확인", "#f4f8e6", LIME, 10)
+    _box(ax, 5.5, 1.6, 3.15, 0.85, "드론 확인", "#f4f8e6", LIME, 10)
+    _box(ax, 2.5, 0.2, 5, 0.85, "확정 · 결과 기록\n변화 유형 · 사진 · 오탐 사유", "#f4f8e6", LIME, 10, "bold")
 
     for y0, y1 in ((7.9, 7.25), (6.4, 5.75), (4.9, 4.25)):
         _arrow(ax, (5, y0), (5, y1))
     _arrow(ax, (4.2, 3.4), (3.0, 2.45))
     _arrow(ax, (5.8, 3.4), (7.0, 2.45))
-    _arrow(ax, (3.0, 1.6), (4.2, 1.05), GREEN)
-    _arrow(ax, (7.0, 1.6), (5.8, 1.05), GREEN)
+    _arrow(ax, (3.0, 1.6), (4.2, 1.05), LIME)
+    _arrow(ax, (7.0, 1.6), (5.8, 1.05), LIME)
 
     # 환류 — 현장 결과가 다음 주기 우선순위로 되돌아간다.
     # 곡선(arc3)으로 그리면 좌측 "현장직원 확인" 박스를 관통하므로, 바깥으로 우회하는
@@ -495,7 +498,7 @@ def fig_architecture() -> None:
     for i, (code, name, out) in enumerate(modules):
         x = i * 1.5 + 0.08
         # AGENT는 판정에 관여하지 않으므로 색을 달리해 위치를 분명히 한다
-        fc, ec = ("#fafafa", FAINT) if code == "AGENT" else ("#eff6ff", BLUE)
+        fc, ec = ("#fafafa", FAINT) if code == "AGENT" else ("#e6f4ed", BLUE)
         _box(ax, x, 1.15, 1.34, 0.95, f"{code}\n{name}", fc, ec, 9.5, "bold")
         ax.text(x + 0.67, 0.85, out, ha="center", va="top", fontsize=7.8, color=MUTED)
         if i < len(modules) - 1:
