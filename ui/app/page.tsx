@@ -30,6 +30,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [backtestOpen, setBacktestOpen] = useState(false);
   const [weeklyReportOpen, setWeeklyReportOpen] = useState(false);
+  // 좌측 목록 접기 — 1024px에서 필지를 선택하면 지도에 296px밖에 안 남아 지도가
+  // 기능을 잃는다(2026-08-31 실측). 접으면 그 폭이 지도로 넘어간다.
+  const [queueOpen, setQueueOpen] = useState(true);
   // "이번 주 몇 곳 갈 수 있는가" — 이 값이 Top-N 경계를 정한다(§InspectionBudgetPanel).
   const [budget, setBudget] = useState(10);
   // 예산 범위에서 실제로 몇 %를 잡을 수 있는지는 **검증 데이터가 있을 때만** 표시한다.
@@ -123,6 +126,19 @@ export default function Home() {
                 미점검 <strong className="font-semibold text-warn">{uninspected}</strong>필지
               </span>
             </div>
+            <button
+              onClick={() => setQueueOpen((v) => !v)}
+              aria-pressed={!queueOpen}
+              aria-label={queueOpen ? "점검 목록 접기" : "점검 목록 펼치기"}
+              title={queueOpen ? "점검 목록 접기" : "점검 목록 펼치기"}
+              className="btn-ghost flex h-8 w-8 items-center justify-center"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+                {!queueOpen && <path d="M13 9l3 3-3 3" />}
+              </svg>
+            </button>
             <button onClick={() => setBacktestOpen(true)} className="btn-ghost px-3 py-1.5 text-xs font-medium">
               예측 성능 검증
             </button>
@@ -143,6 +159,7 @@ export default function Home() {
         )}
 
         <div className="flex min-h-0 flex-1 gap-2 p-2">
+          {queueOpen && (
           <aside className="glass flex w-[19rem] shrink-0 flex-col overflow-hidden">
             <InspectionBudgetPanel
               entries={queue}
@@ -161,6 +178,7 @@ export default function Home() {
               />
             </div>
           </aside>
+          )}
 
           <main className="glass min-w-0 flex-1 overflow-hidden">
             <MapView

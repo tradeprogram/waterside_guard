@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchBacktest, type BacktestResult, type Envelope } from "@/lib/api";
 import CoverageCurveChart from "./CoverageCurveChart";
 import AblationPanel from "./AblationPanel";
+import { useDialog } from "@/lib/useDialog";
 
 // Module VERIFY(§ARCHITECTURE.md §5)의 GET /verify/backtest를 그대로 보여준다 — 이 화면이
 // 없으면 예측 성능을 어디서 확인하느냐는 질문에 답할 방법이 없었다.
@@ -28,6 +29,7 @@ function StatTile({ value, label }: { value: string; label: string }) {
 }
 
 export default function BacktestModal({ onClose }: { onClose: () => void }) {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const [k, setK] = useState(10);
   const [result, setResult] = useState<Envelope<BacktestResult> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +68,9 @@ export default function BacktestModal({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="glass flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="glass flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

@@ -16,6 +16,7 @@ import SeasonalBaselineChart from "./SeasonalBaselineChart";
 import EvidenceConfidence from "./EvidenceConfidence";
 import AblationPanel from "./AblationPanel";
 import { TIER_BADGE, TIER_COLOR, TIER_ORDER } from "@/lib/tiers";
+import { useDialog } from "@/lib/useDialog";
 
 type Evidence = Awaited<ReturnType<typeof fetchEvidence>>;
 
@@ -358,6 +359,7 @@ function ReportBody({ data, budget }: { data: ReportData; budget: number }) {
 }
 
 export default function WeeklyReportModal({ budget, onClose }: { budget: number; onClose: () => void }) {
+  const dialogRef = useDialog<HTMLDivElement>(onClose);
   const [weekOf, setWeekOf] = useState(() => new Date().toISOString().slice(0, 10));
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -407,7 +409,12 @@ export default function WeeklyReportModal({ budget, onClose }: { budget: number;
 
   return (
     <div
-      className="report-overlay fixed inset-0 z-50 overflow-y-auto scroll-thin"
+      ref={dialogRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="주간 점검현황 보고"
+      className="report-overlay fixed inset-0 z-50 overflow-y-auto scroll-thin outline-none"
       style={{ background: "rgba(26,29,33,0.42)", backdropFilter: "blur(3px)" }}
       onClick={onClose}
     >

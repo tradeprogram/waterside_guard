@@ -227,6 +227,18 @@ export default function MapView({
     };
   }, []);
 
+  // 사이드바 접기 등으로 컨테이너 폭이 바뀌면 MapLibre에 알려줘야 한다 —
+  // 안 하면 캔버스가 이전 크기 그대로 남아 지도가 늘어난 채로 그려진다.
+  // window resize만 듣는 것으로는 부족하다(창 크기는 그대로인데 패널만 바뀌는 경우).
+  useEffect(() => {
+    const container = containerRef.current;
+    const map = mapRef.current;
+    if (!container || !map) return;
+    const observer = new ResizeObserver(() => map.resize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   // sites/selectedSiteId가 바뀔 때마다 지도 위 데이터만 갱신
   useEffect(() => {
     const map = mapRef.current;
