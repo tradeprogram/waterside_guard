@@ -1,0 +1,27 @@
+# Render Blueprint — 최소 백엔드(api_min.py) 배포 정의.
+#
+# 대시보드에서 New > Blueprint 로 이 저장소를 연결하면 아래 설정이 그대로 적용된다.
+# 수동으로 만들 때 틀리기 쉬운 두 곳(빌드에 requirements-min.txt를 쓰는 것,
+# 시작 명령이 0.0.0.0 과 $PORT 에 바인딩하는 것)을 파일로 고정해 두는 게 목적이다.
+#
+# 조회용 응답은 Vercel에서 정적 파일로 서빙되므로 이 서비스에는 AGENT 조회·주간의견·
+# 점검등록만 남는다. geopandas·earthengine-api가 필요 없어 빌드가 가볍다(docs/배포.md).
+services:
+  - type: web
+    name: waterside-guard-api
+    runtime: python
+    plan: free
+    region: singapore # Render 리전 중 한국에서 가장 가깝다
+    branch: main
+    buildCommand: pip install -r requirements-min.txt
+    # --host 0.0.0.0 이 없으면 컨테이너 밖에서 못 붙고,
+    # 포트는 Render가 주입하는 $PORT 를 써야 라우팅이 연결된다.
+    startCommand: uvicorn api_min:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GEMINI_API_KEY
+        sync: false # 대시보드에서 직접 입력 (저장소에 키를 넣지 않는다)
+      - key: ALLOWED_ORIGINS
+        sync: false # Vercel 도메인. 비우면 배포된 UI가 CORS에 막힌다
