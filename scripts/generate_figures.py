@@ -189,12 +189,13 @@ def fig_seasonal_principle() -> None:
 def fig_route_savings() -> None:
     """예산별로 '순위대로 이동' vs '군집 순서 이동' 거리 비교."""
     budgets = [5, 10, 20]
-    naive, clustered, saved_pct = [], [], []
+    naive, clustered, saved_pct, basis = [], [], [], []
     for b in budgets:
         d = _api(f"/priority-queue/route?budget={b}")["data"]
         naive.append(d["naive_order_length_m"] / 1000)
         clustered.append(d["clustered_order_length_m"] / 1000)
         saved_pct.append(d["saved_pct"])
+        basis.append(d["distance_basis"])
 
     fig, ax = plt.subplots(figsize=(8, 4.4))
     x = range(len(budgets))
@@ -216,8 +217,12 @@ def fig_route_savings() -> None:
     ax.set_title("동일한 점검 대상에 필요한 이동거리", fontsize=12, fontweight="bold", color=INK, pad=12)
     ax.legend(fontsize=9, frameon=False, loc="upper left")
     _style(ax)
-    fig.text(0.5, -0.03,
-             "직선거리 기준이며 실제 도로 주행거리와 다를 수 있다. 점검 대상은 동일하고 방문 순서만 바뀐다.",
+    caption = (
+        "실제 도로 주행거리(OSRM) 기준이다. 점검 대상은 동일하고 방문 순서만 바뀐다."
+        if all(b == "driving" for b in basis)
+        else "직선거리 기준이며 실제 도로 주행거리와 다를 수 있다. 점검 대상은 동일하고 방문 순서만 바뀐다."
+    )
+    fig.text(0.5, -0.03, caption,
              ha="center", fontsize=8.5, color=MUTED)
     fig.tight_layout()
     _save(fig, "F_route_savings")
