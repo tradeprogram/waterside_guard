@@ -1,9 +1,14 @@
 """공간 군집화·경로 테스트 — 좌표를 직접 지정해 기하학적으로 검증한다."""
+from unittest.mock import patch
+
 from module_o.routing import cluster_sites, order_route, route_length_m, run
 
 
-def _s(sid, x, y, rank=None):
-    return {"site_id": sid, "xy": (x, y), "rank": rank}
+def _s(sid, x, y, rank=None, lonlat=None):
+    site = {"site_id": sid, "xy": (x, y), "rank": rank}
+    if lonlat is not None:
+        site["lonlat"] = lonlat
+    return site
 
 
 def test_clusters_split_by_distance_threshold():
@@ -84,3 +89,54 @@ def test_reports_savings_versus_naive_rank_order():
     assert data["saved_pct"] > 0
     # 방문 순서는 왼쪽 둘을 먼저 처리하고 오른쪽으로 넘어가야 한다
     assert [v["rank"] for v in data["visit_order"]] == [1, 3, 2, 4]
+
+
+@patch("module_o.routing.fetch_road_distance_matrix_m")
+def test_uses_road_distance_when_all_sites_have_lonlat(mock_fetch):
+    """도로 실거리 조회가 성공하면 직선거리(1000m) 대신 그 값(2000m 왕복 도로)을
+    그대로 써야 한다 — 3km 군집 반경 안이라 여전히 한 묶음이어야 한다."""
+    sites = [_s("A", 0, 0, 1, lonlat=(127.0, 37.0)), _s("B", 1000, 0, 2, lonlat=(127.01, 37.0))]
+    mock_fetch.return_value = [[0, 2000], [2000, 0]]
+
+    result = run({"sites": sites})
+
+    assert result["data"]["distance_basis"] == "driving"
+    assert result["data"]["cluster_count"] == 1
+    assert result["data"]["clusters"][0]["route_length_m"] == 2000
+    assert result["status"] == "ok"
+
+
+@patch("module_o.routing.fetch_road_distance_matrix_m")
+def test_road_distance_over_cluster_threshold_splits_sites(mock_fetch):
+    """직선으로는 가까워도(1000m) 도로로 3km를 넘게 돌아가야 한다면 더는 같은
+    출장으로 묶지 않는다 — 산·강을 낀 필지를 직선거리로 오판하지 않기 위한 핵심 동작이다."""
+    sites = [_s("A", 0, 0, 1, lonlat=(127.0, 37.0)), _s("B", 1000, 0, 2, lonlat=(127.01, 37.0))]
+    mock_fetch.return_value = [[0, 5000], [5000, 0]]
+
+    result = run({"sites": sites})
+
+    assert result["data"]["distance_basis"] == "driving"
+    assert result["data"]["cluster_count"] == 2
+
+
+@patch("module_o.routing.fetch_road_distance_matrix_m")
+def test_falls_back_to_straight_line_when_road_distance_fetch_fails(mock_fetch):
+    """OSRM 조회가 실패해도(mock이 None을 반환) 예외 없이 직선거리로 계속 동작해야 하고,
+    그 사실이 distance_basis와 warnings에 정직하게 남아야 한다."""
+    sites = [_s("A", 0, 0, 1, lonlat=(127.0, 37.0)), _s("B", 1000, 0, 2, lonlat=(127.01, 37.0))]
+    mock_fetch.return_value = None
+
+    result = run({"sites": sites})
+
+    assert result["data"]["distance_basis"] == "straight_line"
+    assert result["data"]["clusters"][0]["route_length_m"] == 1000
+    assert result["status"] == "degraded"
+    assert any("도로 실거리" in w for w in result["warnings"])
+
+
+def test_missing_lonlat_falls_back_to_straight_line_without_warning():
+    """기존 호출부(lonlat을 안 주는 곳)는 경고 없이 예전과 똑같이 동작해야 한다."""
+    sites = [_s("A", 0, 0, 1), _s("B", 1000, 0, 2)]
+    result = run({"sites": sites})
+    assert result["data"]["distance_basis"] == "straight_line"
+    assert result["status"] == "ok"

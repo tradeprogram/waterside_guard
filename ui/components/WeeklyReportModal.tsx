@@ -278,7 +278,9 @@ function ReportBody({ data, budget }: { data: ReportData; budget: number }) {
             </table>
           )}
           <p className="mt-1.5 text-[11px] text-ink-3">
-            직선거리 기준으로 산출한 값이며, 실제 주행거리와는 차이가 있습니다.
+            {route?.distance_basis === "driving"
+              ? "실제 도로 주행거리 기준으로 산출한 값입니다(OSRM)."
+              : "직선거리 기준으로 산출한 값이며, 실제 주행거리와는 차이가 있습니다."}
           </p>
         </section>
       )}
@@ -346,7 +348,11 @@ function ReportBody({ data, budget }: { data: ReportData; budget: number }) {
               점검 이력이 축적되지 않은 요인(최종 점검 후 경과일, 과거 이상 발생 횟수)은 점수 산정에서
               제외되어 있으며, 각 필지의 근거 도표에 빗금으로 표시했습니다.
             </li>
-            <li>이동거리는 직선거리 기준 산출값으로, 실제 주행거리와 차이가 있습니다.</li>
+            <li>
+              {route?.distance_basis === "driving"
+                ? "이동거리는 실제 도로 주행거리(OSRM) 기준 산출값입니다."
+                : "이동거리는 직선거리 기준 산출값으로, 실제 주행거리와 차이가 있습니다."}
+            </li>
             <li>
               적중률(Precision@K)은 현장점검 결과가 축적된 이후에 산출됩니다. 본 보고서의 방법론 근거는
               정답 자료 없이 제시 가능한 계절 기준선 적용 효과입니다.

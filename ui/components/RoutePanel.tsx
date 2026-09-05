@@ -53,7 +53,11 @@ export default function RoutePanel({ route }: { route: RouteResult | null }) {
         </ul>
       )}
 
-      <p className="mt-1.5 text-[11px] text-ink-3">직선거리 기준으로, 실제 주행거리와는 차이가 있습니다.</p>
+      <p className="mt-1.5 text-[11px] text-ink-3">
+        {route.distance_basis === "driving"
+          ? "실제 도로 주행거리 기준입니다(OSRM)."
+          : "직선거리 기준으로, 실제 주행거리와는 차이가 있습니다."}
+      </p>
     </div>
   );
 }

@@ -318,8 +318,10 @@ def get_route(budget: int = 10, max_distance_m: int = 3000) -> dict:
     우선순위 큐는 "어디를 먼저 볼 것인가"만 알려주는데, 현장직원은 하루에 여러 곳을 돌아야
     한다 — 1위가 여주, 2위가 가평이면 점수 순서대로 가는 건 비효율이다.
 
-    **거리는 직선거리다**(EPSG:5179 평면). 실제 도로 주행거리가 아니므로 응답의
-    `distance_basis`가 "straight_line"으로 표시되고 UI가 그대로 안내한다.
+    **거리 기준**: 모든 site의 위경도를 확보할 수 있으면 OSRM 공개 데모 서버로 실제
+    도로 주행거리를 조회한다(§common/road_distance.py, 2026-09-02). 실패하거나 좌표가
+    없으면 EPSG:5179 평면 직선거리로 자동 폴백한다 — 어느 쪽이었는지는 응답의
+    `distance_basis`("driving" | "straight_line")로 항상 표시되고 UI가 그대로 안내한다.
     """
     queue_result = o_run(
         {
@@ -345,14 +347,17 @@ def get_route(budget: int = 10, max_distance_m: int = 3000) -> dict:
         # 거리 계산은 내부 규약대로 EPSG:5179 평면에서 한다(§4.1) — 위경도로 재면 위도에 따라
         # 1도의 실제 거리가 달라져 군집 경계가 지역마다 뒤틀린다.
         xy = None
+        lonlat = None
         if center:
             lat, lon = center
             xy = point_4326_to_5179(lon, lat)
+            lonlat = (lon, lat)  # module_o.routing이 도로 실거리 조회에 쓴다(OSRM은 lon,lat 순서)
         sites.append(
             {
                 "site_id": item["site_id"],
                 "rank": item["rank"],
                 "xy": xy,
+                "lonlat": lonlat,
                 "addr": entry.get("addr") if entry else None,
                 "inspection_priority_score": item.get("inspection_priority_score"),
                 "status": item.get("status"),

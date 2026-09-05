@@ -64,8 +64,9 @@ export default function MapView({
   onSelectSite: (siteId: string) => void;
   /** 이번 주 점검 예산 안에 드는 site — 지도에서 테두리로 구분한다(§InspectionBudgetPanel). */
   budgetSiteIds?: string[];
-  /** 출장 방문 순서 — 지도에 경로선으로 그린다(§module_o/routing.py). 직선거리 기준이라
-      실제 도로가 아니므로 점선으로 그려 "이동 순서"임을 시각적으로 구분한다. */
+  /** 출장 방문 순서 — 지도에 경로선으로 그린다(§module_o/routing.py). 거리 숫자는
+      가능하면 실제 도로 실거리(OSRM)를 쓰지만, 지도에 그리는 선 자체는 정류점을 순서대로
+      잇는 직선일 뿐 실제 도로를 따라가는 폴리라인이 아니므로 점선으로 구분한다. */
   routeStops?: RouteStop[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -133,7 +134,8 @@ export default function MapView({
           type: "line",
           source: "route",
           layout: { "line-cap": "round", "line-join": "round" },
-          // 점선 = "직선거리 기준 방문 순서"이지 실제 주행 경로가 아니라는 시각적 신호
+          // 점선 = 정류점을 잇는 방문 순서선이지 실제 도로를 따라간 경로가 아니라는 시각적 신호
+          // (거리 숫자는 도로 실거리일 수 있어도, 이 선의 모양 자체는 항상 직선 연결이다)
           paint: { "line-color": "#00794a", "line-width": 2.5, "line-dasharray": [2, 2], "line-opacity": 0.9 },
         });
 
