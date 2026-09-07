@@ -1,14 +1,8 @@
 # 수변생태벨트 점검 우선순위 지원시스템
 
-> 저장소명 `waterside_guard`는 코드 식별자로만 남긴다. 대외 명칭은 위 제목을 쓴다 —
-> 공식 사업명(「수변생태벨트 조성·관리」)에 직접 연결되고, '가드'의 감시·단속 어감과
-> 이름에 AI를 내세우는 과장을 함께 피하기 위해서다(근거는 [ARCHITECTURE.md](ARCHITECTURE.md) 머리말의 "명칭 변경" 항목).
-
 한국환경보전원(KECI)이 관리하는 전국 수변녹지·매수토지 중 **오늘 현장직원이 먼저 가봐야 할 곳**을 위성 변화탐지 + GIS 다요인 점검 우선순위 점수로 자동 산출하고, 현장점검 결과를 다시 데이터로 환류시켜 수변녹지 관리의 전 과정을 잇는 의사결정지원 시스템.
 
-> 이 리포에서 작업을 시작하는 모든 사람(사람이든 Claude Code 세션이든)은 이 README를 먼저 읽을 것. 더 상세한 모듈 계약·Backtest 전략·로드맵은 **[ARCHITECTURE.md](ARCHITECTURE.md)**가 정본(SoT)이다. 원본 리서치·핸드오프 브리프는 [`docs/`](docs/)에 있다.
-
-**2026년 한국환경보전원 대국민 환경혁신 아이디어 공모전**(부제: 환경을 잇다, 미래를 잇다) 제출용 프로토타입. 접수 2026.9.1.~9.30. 18:00.
+> 모듈 계약·Backtest 전략의 전문은 **[ARCHITECTURE.md](ARCHITECTURE.md)**가 정본(SoT)이다. 원본 리서치·핸드오프 브리프는 [`docs/`](docs/)에 있다.
 
 ---
 
@@ -18,7 +12,7 @@
 
 한국환경보전원은 이미 약 591만㎡·1,700여 개소의 수변녹지를 GIS로 구축했고, 매수토지 현장 확인에 드론을 운용하며, 2026년 8월부터 국토지리정보원과 국토위성 협력을 시작했다. **데이터는 이미 있다.** 없는 것은 "많은 공간자산과 다양한 영상 중 어느 곳을 먼저 사람이 확인해야 하는지 결정하는" 운영 layer다. 본 시스템은 그 마지막 단계만 새로 제안한다 — 새 위성 플랫폼이 아니다.
 
-왜 이 방향이 가장 방어력이 높은지, 왜 Agent를 전면에 내세우지 않는지, 왜 DNN을 처음부터 쓰지 않는지는 [ARCHITECTURE.md §0](ARCHITECTURE.md#0-프로젝트-배경--왜-이걸-만드는가-반드시-먼저-읽을-것)에 있다.
+왜 이 설계를 택했는지, 왜 Agent를 전면에 내세우지 않는지, 왜 DNN을 처음부터 쓰지 않는지는 [ARCHITECTURE.md §0](ARCHITECTURE.md#0-프로젝트-배경--왜-이걸-만드는가-반드시-먼저-읽을-것)에 있다.
 
 ---
 
@@ -98,7 +92,7 @@ flowchart TB
     class U1,U2 ui
 ```
 
-`K3`(드론)·`K4`(국토위성)는 실제 기관 도입 단계에서 연결하는 확장 경로다. 공모전 프로토타입은 `O1`(Sentinel-2)·`O2`(Sentinel-1)·`O3`(V-World 공개 API)만으로 완성한다 — 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
+`K3`(드론)·`K4`(국토위성)는 실제 기관 도입 단계에서 연결하는 확장 경로다. 본 프로토타입은 `O1`(Sentinel-2)·`O2`(Sentinel-1)·`O3`(V-World 공개 API)만으로 완성한다 — 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
 ### 7단계 상태머신 (관리대상지 1건 기준)
 
@@ -184,7 +178,7 @@ sequenceDiagram
 | 증거 신뢰도 (`evidence_confidence`) | 🧪 Experimental | 판정 로직은 동작하나 **가중치가 label로 보정되지 않음** |
 | 계절 정합 baseline (season-matched) | ✅ Implemented | 과거 3년 동일계절 median/MAD 대비 robust z. 50/50건 적용, 부족 시 두 기간 차분 폴백 |
 | 점검예산 Top-N 시뮬레이터 | ✅ Implemented | 예산 설정 → 리스트·지도에 경계 반영. 예상 발견율은 **라벨이 있을 때만** 표시 |
-| 공간 군집화 + 방문 순서 | ✅ Implemented | 실측 절감: 상위 20곳 415km→252km(**39.2%**). 직선거리 기준임을 명시 |
+| 공간 군집화 + 방문 순서 | ✅ Implemented | 실측 절감: 상위 20곳 639km→393km(**38.5%**). 도로 실거리(OSRM) 기준, 조회 실패 시 직선거리로 폴백 |
 | 변화 이력 타임라인 | ✅ Implemented | 과거 같은 계절 관측 + 현재기간 장면 + 점검 이력을 한 시간축에 |
 | 현장점검 taxonomy (8종 + 보류) | ✅ Implemented | 오탐 원인(예초·계절변화)을 따로 받아 향후 label 기반 확보 |
 | 고해상도 실사 영상 (Esri Wayback) | ✅ Implemented | 시기별 서브미터 영상 + 필지 경계 — Evidence Card에서 현장 출동 전 판단용 |
@@ -210,7 +204,7 @@ sequenceDiagram
 
 API 키는 사용자가 이미 보유하고 있다 — `.env`(git-ignore)에 채워 넣고 시작한다. **절대 코드에 하드코딩하지 않는다.** 상세는 [`.env.example`](.env.example), 데이터 스택 전문은 [ARCHITECTURE.md §3](ARCHITECTURE.md#3-데이터-스택).
 
-### Ground Truth 라벨링 워크플로 (제출 전 최우선 과제)
+### Ground Truth 라벨링 워크플로
 
 현재 프로젝트의 단일 최대 약점은 **채점할 정답지가 없다**는 것이다. Module VERIFY의
 Precision@K 함수가 테스트를 통과한다는 건 *계산 코드가 맞다*는 뜻이지 *실제 탐지
@@ -305,23 +299,6 @@ python -m uvicorn api_server:app --port 8001   # http://127.0.0.1:8001/priority-
 # 대시보드(다른 터미널)
 cd ui && npm install && npm run dev
 ```
-
----
-
-## 로드맵 (요약)
-
-| 기간 | 목표 |
-|---|---|
-| 8/29 | **Data MVP 완료** — 유방동 82/85 + 한강유역 5,526/6,275필지 폴리곤 복원·검증 |
-| 8/29 | **Module OBS·CHG·AGG·RISK 전부 실증 완료** (조기 착수, Google Earth Engine) — 유방동 실제 필지 10건으로 end-to-end 파이프라인·Priority Queue 생성까지 확인 |
-| 9/19–9/22 | **Module O·FIELD·API 서버·대시보드 UI 전부 완료** (조기 착수) — 지도 클릭→Evidence Card→현장점검 등록→Priority Queue 갱신까지 실제 브라우저에서 확인 |
-| 9/23–9/27 | **Module VERIFY·AGENT 전부 완료 + 실증 끝** (조기 착수) — Precision@K·Recall@Top20%·baseline 비교·data leakage 가드, `GET /verify/backtest`. `gemini-3.6-flash`로 Q&A(`/sites/{id}/ask`)·주간보고서(`POST /reports/weekly`) 실제 응답 확인 |
-| — | **8개 모듈 + API 서버 + UI 전부 완료·실증** — GEE·Gemini 둘 다 실제 API 키로 검증 |
-| — | **6개 시/군/구로 확대**(2026-08-29, 사용자 지적 반영) — 유방동만 보던 것을 양평군·가평군·광주시·남양주시·여주시까지 확대, `module_obs/batch.py`로 API 호출을 site 수가 아니라 이미지 수에만 비례하게 개선 |
-| — | **Before/After NDVI 위성 이미지 추가**(2026-08-29, 사용자 지적 반영) — "왜 위성지도인가"에 답하기 위해 실제 NDVI 컬러 이미지를 Evidence Card와 지도 위 선택 위치에 표시(`module_obs/thumbnail.py`, `GET /sites/{id}/thumbnails`, on-demand). 남은 건 §11.3 Red-Team 리허설과 제출 준비 |
-| 9/28–9/30 | Red-Team 방어 리허설, 제출본 Lock, 제출 |
-
-전체 로드맵과 각 마일스톤의 완료 기준은 [ARCHITECTURE.md §12](ARCHITECTURE.md#12-개발-로드맵).
 
 ---
 
